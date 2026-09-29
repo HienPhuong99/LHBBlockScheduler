@@ -121,6 +121,7 @@ namespace LHBBlockScheduler.UI
                 RowHeadersVisible = false,
                 RowTemplate = { Height = 56 }
             };
+            UiKit.DoubleBuffer(_grid);
 
             var colCheck = new DataGridViewCheckBoxColumn
             {

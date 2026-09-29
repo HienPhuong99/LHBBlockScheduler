@@ -105,7 +105,25 @@ namespace LHBBlockScheduler.Core
             return info;
         }
 
-        public static LicenseInfo Current => Check(SettingsManager.Current.LicenseKey);
+        // Kiểm chữ ký RSA 1 lần cho mỗi mã / mỗi ngày (mỗi nút Premium đều hỏi trạng thái bản quyền)
+        private static string _checkedKey;
+        private static DateTime _checkedDay;
+        private static LicenseInfo _checkedInfo;
+
+        public static LicenseInfo Current
+        {
+            get
+            {
+                string key = SettingsManager.Current.LicenseKey ?? "";
+                if (_checkedInfo == null || _checkedKey != key || _checkedDay != DateTime.Today)
+                {
+                    _checkedInfo = Check(key);
+                    _checkedKey = key;
+                    _checkedDay = DateTime.Today;
+                }
+                return _checkedInfo;
+            }
+        }
 
         public static bool IsLicensed => Current.Valid;
 

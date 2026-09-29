@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using Autodesk.AutoCAD.ApplicationServices;
 
 namespace LHBBlockScheduler.Core
@@ -9,10 +11,20 @@ namespace LHBBlockScheduler.Core
     /// Ghi log song song ra 2 nơi:
     /// 1. %APPDATA%\LHBBlockScheduler\log.txt (mặc định cho máy cài đặt)
     /// 2. <Thư mục chứa DLL>\log.txt (thuận tiện mang thư mục sang máy khác test, zip lại có luôn log)
+    /// v9.1: giữ file mở trong lúc ghi dồn dập (mỗi dòng vẫn flush ngay, AutoCAD crash không mất log), tự đóng file
+    /// sau 1 giây không ghi để Notepad / nén zip đọc được. Trước đây mỗi dòng mở + đóng 2 file -> xuất bảng
+    /// vài trăm dòng log chậm thấy rõ. File log quá 5 MB thì đổi tên thành log.old.txt lúc nạp add-in.
     /// </summary>
     public static class Logger
     {
         private static readonly object _lock = new object();
+        private const long MaxLogBytes = 5L * 1024 * 1024;
+        private const int IdleCloseMs = 1000;
+
+        private static StreamWriter _appWriter, _localWriter;
+        private static Timer _closeTimer;
+        private static bool _initialized, _localDisabled;
+        private static string _dllFolder, _localLogPath;
 
         public static string AppDataFolder =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -24,12 +36,14 @@ namespace LHBBlockScheduler.Core
         {
             get
             {
+                if (_dllFolder != null) return _dllFolder;
                 try
                 {
                     string loc = typeof(Logger).Assembly.Location;
-                    return !string.IsNullOrEmpty(loc) ? Path.GetDirectoryName(loc) : null;
+                    _dllFolder = !string.IsNullOrEmpty(loc) ? Path.GetDirectoryName(loc) : null;
                 }
-                catch { return null; }
+                catch { _dllFolder = null; }
+                return _dllFolder;
             }
         }
 
@@ -37,68 +51,107 @@ namespace LHBBlockScheduler.Core
         {
             get
             {
-                try
-                {
-                    string dir = DllFolder;
-                    return !string.IsNullOrEmpty(dir) ? Path.Combine(dir, "log.txt") : null;
-                }
-                catch { return null; }
+                if (_localLogPath != null) return _localLogPath;
+                string dir = DllFolder;
+                _localLogPath = !string.IsNullOrEmpty(dir) ? Path.Combine(dir, "log.txt") : null;
+                return _localLogPath;
             }
         }
 
-        private static void EnsureAppDataFolder()
+        /// <summary>Lần ghi đầu tiên trong phiên: tạo thư mục APPDATA, đổi tên log quá lớn.</summary>
+        private static void EnsureInit()
         {
-            if (!Directory.Exists(AppDataFolder))
-                Directory.CreateDirectory(AppDataFolder);
+            if (_initialized) return;
+            _initialized = true;
+            try { Directory.CreateDirectory(AppDataFolder); } catch { }
+            RotateIfTooBig(AppDataLogFilePath);
+            RotateIfTooBig(LocalLogFilePath);
+            _closeTimer = new Timer(_ => CloseWriters(), null, Timeout.Infinite, Timeout.Infinite);
+        }
+
+        private static void RotateIfTooBig(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path) || new FileInfo(path).Length < MaxLogBytes) return;
+                string old = Path.Combine(Path.GetDirectoryName(path), "log.old.txt");
+                if (File.Exists(old)) File.Delete(old);
+                File.Move(path, old);
+            }
+            catch
+            {
+                // Không đổi tên được (file đang mở ở chỗ khác) -> ghi tiếp vào file cũ
+            }
+        }
+
+        private static StreamWriter Open(string path)
+        {
+            // Cho phép chương trình khác đọc / ghi / xoá file trong lúc add-in đang giữ file
+            var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            return new StreamWriter(fs, Encoding.UTF8) { AutoFlush = true };
+        }
+
+        private static void CloseWriters()
+        {
+            lock (_lock)
+            {
+                try { _appWriter?.Dispose(); } catch { }
+                try { _localWriter?.Dispose(); } catch { }
+                _appWriter = null;
+                _localWriter = null;
+            }
         }
 
         private static void Write(string level, string message)
         {
             lock (_lock)
             {
+                EnsureInit();
                 string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
 
                 // 1. Ghi vào %APPDATA%\LHBBlockScheduler\log.txt
                 try
                 {
-                    EnsureAppDataFolder();
-                    using (var fs = new FileStream(AppDataLogFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
-                    using (var sw = new StreamWriter(fs, Encoding.UTF8))
-                    {
-                        sw.WriteLine(line);
-                        sw.Flush();
-                    }
+                    _appWriter ??= Open(AppDataLogFilePath);
+                    _appWriter.WriteLine(line);
                 }
                 catch (Exception ex)
                 {
+                    try { _appWriter?.Dispose(); } catch { }
+                    _appWriter = null;
                     // Fallback in ra Command line của AutoCAD nếu ghi AppData thất bại
                     try
                     {
                         var doc = Application.DocumentManager?.MdiActiveDocument;
-                        var ed = doc?.Editor;
-                        ed?.WriteMessage($"\n[LHB LOG FALLBACK - Ghi AppData thất bại: {ex.Message}]\n{line}\n");
+                        doc?.Editor?.WriteMessage($"\n[LHB LOG FALLBACK - Ghi AppData thất bại: {ex.Message}]\n{line}\n");
                     }
                     catch { }
                 }
 
                 // 2. Ghi song song vào <Thư mục chứa DLL>\log.txt
-                try
+                if (!_localDisabled)
                 {
-                    string localLog = LocalLogFilePath;
-                    if (!string.IsNullOrEmpty(localLog))
+                    try
                     {
-                        using (var fs = new FileStream(localLog, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
-                        using (var sw = new StreamWriter(fs, Encoding.UTF8))
+                        string localLog = LocalLogFilePath;
+                        if (string.IsNullOrEmpty(localLog)) _localDisabled = true;
+                        else
                         {
-                            sw.WriteLine(line);
-                            sw.Flush();
+                            _localWriter ??= Open(localLog);
+                            _localWriter.WriteLine(line);
                         }
                     }
+                    catch
+                    {
+                        // Thư mục chứa DLL read-only (chặn quyền ghi) -> bỏ ghi log cạnh DLL cả phiên, không throw
+                        try { _localWriter?.Dispose(); } catch { }
+                        _localWriter = null;
+                        _localDisabled = true;
+                    }
                 }
-                catch
-                {
-                    // Nếu thư mục chứa DLL bị read-only (chặn quyền ghi), bỏ qua im lặng không throw
-                }
+
+                // Hết ghi dồn dập 1 giây thì đóng file
+                _closeTimer.Change(IdleCloseMs, Timeout.Infinite);
             }
         }
 
@@ -118,37 +171,8 @@ namespace LHBBlockScheduler.Core
             Write("ERROR", msg);
         }
 
-        /// <summary>Xoá log cũ - xoá ở cả 2 vị trí nếu có.</summary>
-        public static void ClearLog()
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    EnsureAppDataFolder();
-                    using (var fs = new FileStream(AppDataLogFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
-                    using (var sw = new StreamWriter(fs, Encoding.UTF8))
-                    {
-                        sw.Flush();
-                    }
-                }
-                catch { }
-
-                try
-                {
-                    string localLog = LocalLogFilePath;
-                    if (!string.IsNullOrEmpty(localLog) && File.Exists(localLog))
-                    {
-                        using (var fs = new FileStream(localLog, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
-                        using (var sw = new StreamWriter(fs, Encoding.UTF8))
-                        {
-                            sw.Flush();
-                        }
-                    }
-                }
-                catch { }
-            }
-        }
+        /// <summary>Đóng file log (lúc unload add-in).</summary>
+        public static void Flush() => CloseWriters();
 
         /// <summary>Trả về file log ưu tiên (ưu tiên local log cạnh DLL nếu tồn tại, ngược lại trả về AppData log).</summary>
         public static string GetLogFilePath()
@@ -157,6 +181,28 @@ namespace LHBBlockScheduler.Core
             if (!string.IsNullOrEmpty(local) && File.Exists(local))
                 return local;
             return AppDataLogFilePath;
+        }
+
+        /// <summary>
+        /// N dòng cuối của file log. Mở chia sẻ đọc / ghi: File.ReadAllLines báo "file đang được dùng" khi Logger
+        /// đang giữ file.
+        /// </summary>
+        public static List<string> ReadTail(string path, int lines)
+        {
+            var result = new List<string>();
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var sr = new StreamReader(fs, Encoding.UTF8))
+            {
+                var queue = new Queue<string>(lines + 1);
+                string l;
+                while ((l = sr.ReadLine()) != null)
+                {
+                    queue.Enqueue(l);
+                    if (queue.Count > lines) queue.Dequeue();
+                }
+                result.AddRange(queue);
+            }
+            return result;
         }
     }
 }

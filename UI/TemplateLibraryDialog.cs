@@ -60,7 +60,7 @@ namespace LHBBlockScheduler.UI
                 Padding = new Padding(8, 5, 0, 0)
             };
 
-            _grid = new DataGridView
+            _grid = UiKit.DoubleBuffer(new DataGridView
             {
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
@@ -74,7 +74,7 @@ namespace LHBBlockScheduler.UI
                 EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
                 RowTemplate = { Height = 44 },
                 BackgroundColor = SystemColors.Window
-            };
+            });
             _grid.Columns.Add(MakeButtonColumn("colDel", "X", Color.FromArgb(192, 57, 43)));
             _grid.Columns.Add(MakeButtonColumn("colUp", "▲", Color.FromArgb(39, 174, 96)));
             _grid.Columns.Add(MakeButtonColumn("colDown", "▼", Color.FromArgb(39, 174, 96)));
@@ -144,6 +144,7 @@ namespace LHBBlockScheduler.UI
             {
                 if (!ConfirmDiscard()) e.Cancel = true;
             };
+            FormClosed += (s, e) => ClearImageCache();
         }
 
         private static DataGridViewButtonColumn MakeButtonColumn(string name, string text, Color color)
@@ -191,6 +192,8 @@ namespace LHBBlockScheduler.UI
 
         private void LoadSet(string name)
         {
+            _grid.Rows.Clear();
+            ClearImageCache();
             _lib = TemplateLibraryManager.Load(name);
             _pendingBtrIds.Clear();
             _dirty = false;
@@ -214,7 +217,7 @@ namespace LHBBlockScheduler.UI
 
         private void Action_NewSet()
         {
-            string name = PromptText("Bộ mẫu mới", "Tên bộ mẫu mới (vd Data2, Nha xuong):", "Data" + (_cboSet.Items.Count + 1));
+            string name = UiKit.PromptText(this, "Bộ mẫu mới", "Tên bộ mẫu mới (vd Data2, Nha xuong):", "Data" + (_cboSet.Items.Count + 1));
             if (name == null) return;
             name = name.Trim();
             if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
@@ -303,15 +306,13 @@ namespace LHBBlockScheduler.UI
                                                    .Where(u => !string.IsNullOrWhiteSpace(u)).Distinct())
                     colUnit.Items.Add(u);
 
-                foreach (DataGridViewRow row in _grid.Rows)
-                    if (row.Cells["colSym"].Value is Image old) old.Dispose();
                 _grid.Rows.Clear();
 
                 foreach (var e in _lib.Entries)
                 {
                     int r = _grid.Rows.Add();
                     var row = _grid.Rows[r];
-                    row.Cells["colSym"].Value = DecodeImage(e.ThumbnailBase64);
+                    row.Cells["colSym"].Value = ImageOf(e);
                     row.Cells["colBlock"].Value = e.BlockName;
                     row.Cells["colVis"].Value = e.VisibilityState;
                     row.Cells["colDisplay"].Value = e.DisplayName;
@@ -338,6 +339,26 @@ namespace LHBBlockScheduler.UI
             _lblHeader.Text = $"Danh sách block mẫu — bộ '{_lib.Name}': {_lib.Entries.Count} block" + (_dirty ? "  (chưa lưu)" : "") +
                               "      Shift / Ctrl + click chọn nhiều dòng, phím Delete xoá; double-click để sửa ô";
             _lblPath.Text = $"Lưu tại: {TemplateLibraryManager.Folder}   —   mang cả thư mục add-in sang máy khác là có đủ block mẫu";
+        }
+
+        // Ảnh ký hiệu đã giải mã theo block mẫu: bấm Lên / Xuống / Xoá dựng lại lưới không giải mã lại base64 mọi dòng
+        private readonly Dictionary<TemplateEntry, Image> _images = new Dictionary<TemplateEntry, Image>();
+
+        private Image ImageOf(TemplateEntry e)
+        {
+            if (!_images.TryGetValue(e, out var img))
+            {
+                img = DecodeImage(e.ThumbnailBase64);
+                _images[e] = img;
+            }
+            return img;
+        }
+
+        /// <summary>Gọi khi lưới không còn hiện các ảnh này (đổi bộ mẫu / đóng hộp thoại).</summary>
+        private void ClearImageCache()
+        {
+            foreach (var img in _images.Values) img?.Dispose();
+            _images.Clear();
         }
 
         private static Image DecodeImage(string base64)
@@ -556,27 +577,5 @@ namespace LHBBlockScheduler.UI
             }
         }
 
-        private string PromptText(string title, string label, string defaultValue)
-        {
-            using (var dlg = new Form
-            {
-                Text = title,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterParent,
-                MinimizeBox = false,
-                MaximizeBox = false,
-                ClientSize = new Size(360, 110)
-            })
-            {
-                var lbl = new Label { Text = label, Left = 10, Top = 10, Width = 340, AutoEllipsis = true };
-                var txt = new TextBox { Text = defaultValue, Left = 10, Top = 34, Width = 340 };
-                var ok = new Button { Text = "OK", Left = 190, Top = 70, Width = 75, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = "Huỷ", Left = 275, Top = 70, Width = 75, DialogResult = DialogResult.Cancel };
-                dlg.Controls.AddRange(new Control[] { lbl, txt, ok, cancel });
-                dlg.AcceptButton = ok;
-                dlg.CancelButton = cancel;
-                return dlg.ShowDialog(this) == DialogResult.OK ? txt.Text : null;
-            }
-        }
     }
 }

@@ -47,7 +47,83 @@ namespace LHBBlockScheduler.Core
                 }
                 MigrateFromBackupIfEmpty();
                 Logger.Log($"[TemplateLibrary] Thư mục thư viện block mẫu: '{_folder}'");
+                MigrateDeviceLibraries();
                 return _folder;
+            }
+        }
+
+        /// <summary>Thư mục thư viện thiết bị CŨ (trước v9.1): chỉ đọc để chuyển sang block mẫu.</summary>
+        public static string OldLibrariesFolder => Path.Combine(Logger.AppDataFolder, "Libraries");
+
+        public const string OldLibrarySetPrefix = "TV cu ";
+
+        /// <summary>
+        /// v9.1 bỏ thư viện thiết bị cũ (nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV), chỉ còn thư viện
+        /// block mẫu. Chuyển 1 lần: mỗi file cũ có dữ liệu thành bộ mẫu "TV cu &lt;tên&gt;" (không đụng bộ đang dùng, không
+        /// làm đổi kết quả quét), mỗi tên block đã biết của 1 thiết bị thành 1 block mẫu. Thiết bị cũ chỉ có hình, không
+        /// có tên block thì không chuyển được (block mẫu khớp theo tên) -> ghi log. Xong ghi settings
+        /// DeviceLibrariesMigrated = true.
+        /// </summary>
+        private static void MigrateDeviceLibraries()
+        {
+            if (SettingsManager.Current.DeviceLibrariesMigrated) return;
+            try
+            {
+                if (Directory.Exists(OldLibrariesFolder))
+                {
+                    foreach (var file in Directory.GetFiles(OldLibrariesFolder, "*.json"))
+                    {
+                        string oldName = Path.GetFileNameWithoutExtension(file);
+                        DeviceLibrary old;
+                        try
+                        {
+                            old = JsonHelper.Deserialize<DeviceLibrary>(File.ReadAllText(file));
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"[TemplateLibrary.Migrate] Bỏ qua '{file}': đọc lỗi {ex.Message}");
+                            continue;
+                        }
+                        var entries = (old?.Entries ?? new List<DeviceLibraryEntry>()).Where(e => e != null).OrderBy(e => e.Order).ToList();
+                        if (entries.Count == 0) continue;
+
+                        string setName = OldLibrarySetPrefix + oldName;
+                        if (File.Exists(JsonPath(setName))) continue;
+                        var lib = new TemplateLibrary { Name = setName };
+                        int noName = 0;
+                        foreach (var e in entries)
+                        {
+                            var names = (e.KnownBlockNames ?? new List<string>())
+                                .Where(n => !string.IsNullOrWhiteSpace(n) && !n.StartsWith("*"))
+                                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                            if (names.Count == 0) { noName++; continue; }
+                            foreach (var n in names)
+                            {
+                                if (lib.Entries.Any(x => string.Equals(x.BlockName, n, StringComparison.OrdinalIgnoreCase) &&
+                                                         string.Equals(x.VisibilityState, e.VisibilityState ?? "", StringComparison.OrdinalIgnoreCase)))
+                                    continue;
+                                lib.Entries.Add(new TemplateEntry
+                                {
+                                    BlockName = n,
+                                    VisibilityState = e.VisibilityState ?? "",
+                                    DisplayName = string.IsNullOrWhiteSpace(e.StandardName) ? n : e.StandardName,
+                                    Unit = string.IsNullOrWhiteSpace(e.Unit) ? "Cái" : e.Unit,
+                                    Note = e.Note ?? "",
+                                    ThumbnailBase64 = e.ThumbnailBase64
+                                });
+                            }
+                        }
+                        if (lib.Entries.Count > 0) Save(lib);
+                        Logger.Log($"[TemplateLibrary.Migrate] Thư viện cũ '{oldName}' ({entries.Count} thiết bị) -> bộ mẫu '{setName}': " +
+                                   $"{lib.Entries.Count} block mẫu" + (noName > 0 ? $", {noName} thiết bị không có tên block (chỉ có hình) không chuyển được" : ""));
+                    }
+                }
+                SettingsManager.Current.DeviceLibrariesMigrated = true;
+                SettingsManager.SaveSettings();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "[TemplateLibrary.Migrate] Chuyển thư viện thiết bị cũ sang block mẫu");
             }
         }
 
@@ -429,7 +505,7 @@ namespace LHBBlockScheduler.Core
                         var id = so.ObjectId;
                         if (id.IsNull || !id.IsValid || id.IsErased) continue;
                         bool keep = false, parent = false;
-                        if (tr.GetObject(id, OpenMode.ForRead) is BlockReference br)
+                        if (id.ObjectClass.IsDerivedFrom(BlockExtractor.BlockRefClass) && tr.GetObject(id, OpenMode.ForRead) is BlockReference br)
                         {
                             keep = IsTemplate(tr, br);
                             if (!keep && _maxDepth > 1) keep = parent = ContainsTemplate(tr, br.BlockTableRecord, 1);
@@ -473,6 +549,8 @@ namespace LHBBlockScheduler.Core
             {
                 foreach (ObjectId id in btr)
                 {
+                    // Lọc theo loại trước khi mở: định nghĩa block cha có nhiều nét, ít block con
+                    if (!id.ObjectClass.IsDerivedFrom(BlockExtractor.BlockRefClass)) continue;
                     if (!(tr.GetObject(id, OpenMode.ForRead) is BlockReference child)) continue;
                     if (IsTemplate(tr, child) ||
                         (childDepth + 1 < _maxDepth && ContainsTemplate(tr, child.BlockTableRecord, childDepth + 1)))

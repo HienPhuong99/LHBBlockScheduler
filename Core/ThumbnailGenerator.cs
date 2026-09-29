@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Runtime.InteropServices;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -21,11 +23,18 @@ namespace LHBBlockScheduler.Core
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                          "LHBBlockScheduler", "Thumbs");
 
+        private static bool _folderReady;
+
+        // ShapeHash theo file PNG: mỗi lần quét lại (đổi tuỳ chọn trên form) không phải đọc + giải mã lại PNG.
+        // File PNG chỉ đổi khi GenerateThumbnail ghi lại / ClearCache xoá -> xoá mục tương ứng ở đó.
+        private static readonly Dictionary<string, ulong> _hashCache = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// Xoá toàn bộ file PNG trong bộ nhớ đệm cache thumbnail.
         /// </summary>
         public static void ClearCache()
         {
+            _hashCache.Clear();
             try
             {
                 if (Directory.Exists(ThumbCacheFolder))
@@ -44,44 +53,17 @@ namespace LHBBlockScheduler.Core
         }
 
         /// <summary>
-        /// Lấy hoặc tạo thumbnail theo tên block.
-        /// </summary>
-        public static string GetOrCreateThumbnail(Document sourceDoc, string blockName)
-        {
-            if (string.IsNullOrEmpty(blockName) || sourceDoc == null) return null;
-
-            Directory.CreateDirectory(ThumbCacheFolder);
-            string safeFileName = MakeSafeFileName(blockName);
-            string pngPath = Path.Combine(ThumbCacheFolder, safeFileName + ".png");
-
-            if (File.Exists(pngPath))
-            {
-                return pngPath;
-            }
-
-            using (var tr = sourceDoc.Database.TransactionManager.StartTransaction())
-            {
-                var bt = (BlockTable)tr.GetObject(sourceDoc.Database.BlockTableId, OpenMode.ForRead);
-                if (!bt.Has(blockName))
-                {
-                    Logger.Warn($"ThumbnailGenerator: block '{blockName}' không tồn tại trong BlockTable nguồn");
-                    tr.Commit();
-                    return null;
-                }
-                var btrId = bt[blockName];
-                tr.Commit();
-                return GenerateThumbnail(sourceDoc, btrId, blockName, pngPath);
-            }
-        }
-
-        /// <summary>
         /// Lấy hoặc tạo thumbnail theo BlockTableRecord ObjectId (hỗ trợ cả dynamic block anonymous record).
         /// </summary>
         public static string GetOrCreateThumbnail(Document sourceDoc, ObjectId btrId, string cacheKey)
         {
             if (btrId.IsNull || sourceDoc == null) return null;
 
-            Directory.CreateDirectory(ThumbCacheFolder);
+            if (!_folderReady)
+            {
+                Directory.CreateDirectory(ThumbCacheFolder);
+                _folderReady = true;
+            }
             string safeFileName = MakeSafeFileName(cacheKey);
             string pngPath = Path.Combine(ThumbCacheFolder, safeFileName + ".png");
 
@@ -90,6 +72,7 @@ namespace LHBBlockScheduler.Core
                 return pngPath;
             }
 
+            _hashCache.Remove(pngPath);
             return GenerateThumbnail(sourceDoc, btrId, cacheKey, pngPath);
         }
 
@@ -230,38 +213,58 @@ namespace LHBBlockScheduler.Core
             return bmp;
         }
 
+        /// <summary>Đọc toàn bộ điểm ảnh dạng BGRA (LockBits: nhanh hơn GetPixel từng điểm hàng chục lần).</summary>
+        private static byte[] ReadPixels(Bitmap bmp)
+        {
+            var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+            var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                var buf = new byte[bmp.Width * bmp.Height * 4];
+                for (int y = 0; y < bmp.Height; y++)
+                    Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), buf, y * bmp.Width * 4, bmp.Width * 4);
+                return buf;
+            }
+            finally
+            {
+                bmp.UnlockBits(data);
+            }
+        }
+
         private static bool IsAlmostAllWhite(Bitmap bmp, double threshold)
         {
+            var px = ReadPixels(bmp);
             int nearWhiteCount = 0;
             int total = bmp.Width * bmp.Height;
-
-            for (int y = 0; y < bmp.Height; y++)
+            for (int i = 0; i < px.Length; i += 4)
             {
-                for (int x = 0; x < bmp.Width; x++)
-                {
-                    Color c = bmp.GetPixel(x, y);
-                    if (c.A < 20 || (c.R >= 240 && c.G >= 240 && c.B >= 240))
-                    {
-                        nearWhiteCount++;
-                    }
-                }
+                // BGRA
+                if (px[i + 3] < 20 || (px[i + 2] >= 240 && px[i + 1] >= 240 && px[i] >= 240))
+                    nearWhiteCount++;
             }
-
             return (double)nearWhiteCount / total >= threshold;
         }
 
         private static Bitmap InvertBitmapRgb(Bitmap src)
         {
-            var res = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
-            for (int y = 0; y < src.Height; y++)
+            var px = ReadPixels(src);
+            // Đảo ngược RGB: nền đen (0,0,0) -> trắng (255,255,255), nét trắng -> đen (0,0,0), giữ kênh A
+            for (int i = 0; i < px.Length; i += 4)
             {
-                for (int x = 0; x < src.Width; x++)
-                {
-                    Color c = src.GetPixel(x, y);
-                    // Đảo ngược RGB: nền đen (0,0,0) -> trắng (255,255,255), nét trắng -> đen (0,0,0)
-                    Color inv = Color.FromArgb(c.A, 255 - c.R, 255 - c.G, 255 - c.B);
-                    res.SetPixel(x, y, inv);
-                }
+                px[i] = (byte)(255 - px[i]);
+                px[i + 1] = (byte)(255 - px[i + 1]);
+                px[i + 2] = (byte)(255 - px[i + 2]);
+            }
+            var res = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+            var data = res.LockBits(new Rectangle(0, 0, res.Width, res.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                for (int y = 0; y < res.Height; y++)
+                    Marshal.Copy(px, y * res.Width * 4, IntPtr.Add(data.Scan0, y * data.Stride), res.Width * 4);
+            }
+            finally
+            {
+                res.UnlockBits(data);
             }
             return res;
         }
@@ -379,8 +382,8 @@ namespace LHBBlockScheduler.Core
             int dist = 0;
             while (diff != 0)
             {
-                dist += (int)(diff & 1UL);
-                diff >>= 1;
+                diff &= diff - 1; // xoá bit 1 thấp nhất
+                dist++;
             }
             return dist;
         }
@@ -390,14 +393,18 @@ namespace LHBBlockScheduler.Core
         /// </summary>
         public static ulong GetHashFromPngFile(string pngPath)
         {
-            if (string.IsNullOrEmpty(pngPath) || !File.Exists(pngPath)) return 0;
+            if (string.IsNullOrEmpty(pngPath)) return 0;
+            if (_hashCache.TryGetValue(pngPath, out ulong cached)) return cached;
+            if (!File.Exists(pngPath)) return 0;
             try
             {
                 using (var fs = new FileStream(pngPath, FileMode.Open, FileAccess.Read))
                 using (var img = System.Drawing.Image.FromStream(fs))
                 using (var bmp = new Bitmap(img))
                 {
-                    return ComputeDHash64(bmp);
+                    ulong hash = ComputeDHash64(bmp);
+                    _hashCache[pngPath] = hash;
+                    return hash;
                 }
             }
             catch (Exception ex)
@@ -405,6 +412,12 @@ namespace LHBBlockScheduler.Core
                 Logger.Error(ex, $"GetHashFromPngFile: {pngPath}");
                 return 0;
             }
+        }
+
+        /// <summary>Bỏ hash đã nhớ của 1 file PNG (file bị xoá để render lại).</summary>
+        public static void ForgetHash(string pngPath)
+        {
+            if (!string.IsNullOrEmpty(pngPath)) _hashCache.Remove(pngPath);
         }
 
         private static string MakeSafeFileName(string name)

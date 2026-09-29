@@ -137,13 +137,19 @@ Bạn sẽ thấy dòng thông báo:
 | 🔗 **Gộp nhóm** | Chọn nhiều dòng (giữ Ctrl + Click) → nhấn nút **Gộp** |
 | ⬆️⬇️ **Đổi thứ tự** | Chọn 1 dòng → nhấn nút **Lên** hoặc **Xuống** |
 | ❌ **Xóa dòng** | Chọn dòng → nhấn nút **Xóa** |
-| 💾 **Lưu mẫu** | Nhấn nút **Lưu Data** → đặt tên (gợi ý: đặt `default`) |
-| 📥 **Nạp mẫu** | Chọn tên mẫu đã lưu từ dropdown |
 | 📤 **Xuất bảng** | Nhấn nút **Xuất bảng** → click chọn điểm chèn trên bản vẽ |
 | ↔️ **Căn lề** | Kéo chuột quét chọn các ô → nhấn **Trái / Giữa / Phải**. Bảng xuất căn đúng như vậy |
 | 🔁 **Block trùng vị trí** | Cột **Trùng** báo số block cùng tên bị copy đè / che lấp nhau. Ô **Không đếm trùng** (bật sẵn) trừ phần thừa khỏi SL. Nút **Tìm trùng** mở danh sách chỗ trùng: zoom tới, khoanh đỏ, xoá bản thừa, đổi sai số vị trí và mức che lấp (%) |
-| ➕ **Quét thêm** | Nút **Quét thêm** (hàng 3): chọn thêm vùng, SL cộng dồn vào bảng đang có, giữ tên / đơn vị đã sửa. Vùng đã chọn trước không đếm lại |
-| 📚 **Block mẫu** | Chọn **Bộ block mẫu**, nút **Block mẫu...** mở thư viện. Ô **Chỉ quét block mẫu** bật: lúc quét chỉ dính block mẫu, block khác không được chọn; dòng được đặt tên, đơn vị, thứ tự theo thư viện |
+| ➕ **Quét thêm** | Nút **Quét thêm** (hàng 1): chọn thêm vùng, SL cộng dồn vào bảng đang có, giữ tên / đơn vị đã sửa. Vùng đã chọn trước không đếm lại |
+| 📚 **Block mẫu** | Chọn **Bộ block mẫu**, nút **Block mẫu...** mở thư viện. Ô **Chỉ quét block mẫu** bật: lúc quét chỉ dính block mẫu, block khác không được chọn; dòng được đặt tên, đơn vị, thứ tự theo thư viện. Cột **TT** chấm xanh = có trong bộ block mẫu |
+
+> Từ v9.1 chỉ còn **thư viện block mẫu** (bỏ thư viện thiết bị cũ: nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV). Thư viện cũ đã có dữ liệu được tự chuyển 1 lần thành bộ mẫu tên `TV cu <tên>` (vd `TV cu default`), chọn ở ô **Bộ block mẫu** nếu muốn dùng.
+
+### Lệnh `LHBLEGEND` — Lấy bảng Legend có sẵn làm block mẫu
+
+1. Gõ `LHBLEGEND`, chọn bảng Legend (AutoCAD Table có cột ký hiệu là block).
+2. Kiểm tra cột nào là **Ký hiệu (Block)**, **Tên thiết bị**, **Chủng loại**, **Đơn vị** (tự gợi ý theo tiêu đề cột).
+3. Ô **Lưu vào bộ block mẫu** (mặc định bộ đang dùng, gõ tên mới = tạo bộ mới) → **Lưu vào bộ mẫu**. Mỗi dòng có block thành 1 block mẫu, tên thống kê = tên trong Legend. Dòng không có block trong ô ký hiệu bị bỏ qua.
 
 ### Lệnh `LHBMAU` — Thư viện block mẫu
 
@@ -166,7 +172,7 @@ Bạn sẽ thấy dòng thông báo:
 
 ---
 
-## ⭐ Tính năng Premium (v9)
+## ⭐ Tính năng Premium (từ v9)
 
 Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Dùng thử 30 ngày, sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
 
@@ -207,35 +213,11 @@ Chọn dòng trên form → Premium ▾ > **Thay block...** → chọn block đ�
 
 > 💡 Mang sang máy khác: copy nguyên thư mục add-in (có thư mục `ThuVienMau`). Giải nén bản add-in mới sang thư mục khác trên cùng máy thì thư viện tự chép từ bản dự phòng `%APPDATA%\LHBBlockScheduler\ThuVienMau`.
 
-> 💡 **Mẹo:** Lưu mẫu với tên `default` — lần sau quét bản vẽ khác có cùng block, plugin sẽ **tự động áp dụng** tên hiển thị và nhóm đã lưu.
+> 💡 **Mẹo:** Đặt tên thống kê, đơn vị, thứ tự trong bộ block mẫu (`LHBMAU` hoặc `LHBLEGEND`) — lần sau quét bản vẽ khác có cùng block, dòng **tự đặt tên** theo bộ mẫu đang chọn.
 
 ---
 
-### Lệnh 2: `LHBSCANTEST` — Test nhanh
-
-Dùng để kiểm tra xem plugin có nhận diện đúng block không, **không mở cửa sổ**.
-
-1. Gõ `LHBSCANTEST` → Enter
-2. Chọn vùng → Enter
-3. Kết quả in ra ở command line, ví dụ:
-   ```
-   --- Kết quả quét: 3 loại Block ---
-   Cửa Sổ : 4
-   Cửa Đi : 3
-   sprinkler : 4
-   ```
-
----
-
-### Lệnh 3: `LHBTHUMBTEST` — Test ảnh thumbnail
-
-1. Gõ `LHBTHUMBTEST` → Enter
-2. Click chọn 1 block trên bản vẽ
-3. Plugin sẽ xuất ảnh PNG và mở lên cho bạn xem
-
----
-
-### Lệnh 4: `LHBLOG` — Xem log khi có lỗi
+### Lệnh `LHBLOG` — Xem log khi có lỗi
 
 Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 
@@ -288,9 +270,7 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 | `LHBSCAN` | Quét block trên bản vẽ → mở giao diện thống kê đầy đủ tính năng |
 | `LHBMAU` | Thư viện block mẫu: thêm / xoá / sắp xếp / đặt tên thống kê / chèn block mẫu |
 | `LHBLENH` | Danh sách lệnh, chạy lệnh, đổi phím tắt (mặc định gõ `LHB`) |
-| `LHBSCANTEST` | Quét block nhanh → chỉ in kết quả ra Command Line (không mở Form) |
-| `LHBTHUMBTEST` | Chọn 1 block → test xuất ảnh thumbnail PNG qua GraphicsSystem |
-| `LHBLEGEND` | Quét bảng Legend (Table) có sẵn trên bản vẽ vào Thư viện thiết bị |
+| `LHBLEGEND` | Quét bảng Legend (Table) có sẵn trên bản vẽ vào bộ block mẫu |
 | `LHBCLEARCACHE` | Xoá toàn bộ bộ nhớ đệm hình ảnh thumbnail (%APPDATA%\LHBBlockScheduler\Thumbs) |
 | `LHBRELOAD` | Nạp lại phiên bản mới nhất từ thư mục Runtime (dành cho Dev, không cần tắt CAD) |
 | `LHBLOG` | Mở file nhật ký ghi lỗi (log.txt) |

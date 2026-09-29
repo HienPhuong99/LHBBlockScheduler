@@ -23,13 +23,15 @@ namespace LHBBlockScheduler.UI
         private ComboBox _cboLibrary;
         private DataGridView _gridPreview;
         private Button _btnSave, _btnCancel;
+        // Ảnh xem trước theo block của ô: đổi ánh xạ cột không phải render lại (mỗi lần render GS tốn ~0.1 giây / block)
+        private readonly Dictionary<ObjectId, Bitmap> _previewCache = new Dictionary<ObjectId, Bitmap>();
 
         public LegendTableMapDialog(Document doc, ObjectId tableId)
         {
             _doc = doc;
             _tableId = tableId;
 
-            Text = "Quét bảng Legend - Ánh xạ cột vào Thư viện thiết bị";
+            Text = "Quét bảng Legend - Lưu vào bộ block mẫu";
             Width = 850;
             Height = 600;
             StartPosition = FormStartPosition.CenterScreen;
@@ -39,6 +41,11 @@ namespace LHBBlockScheduler.UI
             ReadTableData();
             BuildUi();
             GeneratePreview();
+            FormClosed += (s, e) =>
+            {
+                foreach (var b in _previewCache.Values) b?.Dispose();
+                _previewCache.Clear();
+            };
         }
 
         private void ReadTableData()
@@ -183,6 +190,7 @@ namespace LHBBlockScheduler.UI
                 RowHeadersVisible = false,
                 RowTemplate = { Height = 48 }
             };
+            UiKit.DoubleBuffer(_gridPreview);
 
             _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "Order", HeaderText = "STT", Width = 50 });
             var colImg = new DataGridViewImageColumn { Name = "Thumb", HeaderText = "Ký hiệu", Width = 60, ImageLayout = DataGridViewImageCellLayout.Zoom };
@@ -196,14 +204,18 @@ namespace LHBBlockScheduler.UI
             midPanel.Controls.Add(_gridPreview);
 
             var bottomPanel = new Panel { Dock = DockStyle.Bottom, Height = 50, Padding = new Padding(10) };
-            var lblLib = new Label { Text = "Lưu vào Thư viện:", Top = 14, Left = 10, Width = 110 };
-            _cboLibrary = new ComboBox { Top = 10, Left = 125, Width = 180, DropDownStyle = ComboBoxStyle.DropDown };
-            foreach (var lib in DeviceLibraryManager.ListLibraries())
-                _cboLibrary.Items.Add(lib);
-            if (_cboLibrary.Items.Count > 0) _cboLibrary.SelectedIndex = 0;
+            var lblLib = new Label { Text = "Lưu vào bộ block mẫu:", Top = 14, Left = 10, Width = 130 };
+            // Mặc định = bộ đang dùng khi quét (LHBSCAN áp tên ngay). Gõ tên mới = tạo bộ mới
+            _cboLibrary = new ComboBox { Top = 10, Left = 145, Width = 180, DropDownStyle = ComboBoxStyle.DropDown };
+            foreach (var set in TemplateLibraryManager.ListSets())
+                _cboLibrary.Items.Add(set);
+            string current = SettingsManager.Current.CurrentTemplateSet;
+            if (!string.IsNullOrEmpty(current) && !_cboLibrary.Items.Contains(current)) _cboLibrary.Items.Add(current);
+            _cboLibrary.SelectedItem = current;
+            if (_cboLibrary.SelectedIndex < 0 && _cboLibrary.Items.Count > 0) _cboLibrary.SelectedIndex = 0;
 
             // Không gán DialogResult cho nút Lưu: nếu lưu lỗi thì dialog phải ở lại để người dùng thử lại
-            _btnSave = new Button { Text = "Lưu vào Thư viện", Top = 8, Left = 670, Width = 140, Height = 32 };
+            _btnSave = new Button { Text = "Lưu vào bộ mẫu", Top = 8, Left = 670, Width = 140, Height = 32 };
             _btnSave.Click += Btn_Save_Click;
             _btnCancel = new Button { Text = "Đóng", Top = 8, Left = 570, Width = 90, Height = 32, DialogResult = DialogResult.Cancel };
 
@@ -269,18 +281,16 @@ namespace LHBBlockScheduler.UI
                 ObjectId btrId = symbolCol >= 0 && symbolCol < rowBlocks.Length ? rowBlocks[symbolCol] : ObjectId.Null;
                 gridRow.Tag = btrId;
 
-                // Nếu có block, thử render thumbnail
+                // Nếu có block, thử render thumbnail (nhớ theo block, đổi ánh xạ cột không render lại)
                 if (!btrId.IsNull && btrId.IsValid)
                 {
-                    try
+                    if (!_previewCache.TryGetValue(btrId, out var bmp))
                     {
-                        var bmp = ThumbnailGenerator.RenderBtrToBitmap(_doc, btrId, 48, 48, Color.White);
-                        if (bmp != null)
-                        {
-                            gridRow.Cells["Thumb"].Value = bmp;
-                        }
+                        try { bmp = ThumbnailGenerator.RenderBtrToBitmap(_doc, btrId, 48, 48, Color.White); }
+                        catch (Exception ex) { Logger.Warn($"[LegendTableMapDialog] Render xem trước block {btrId.Handle} lỗi: {ex.Message}"); }
+                        _previewCache[btrId] = bmp;
                     }
-                    catch { }
+                    if (bmp != null) gridRow.Cells["Thumb"].Value = bmp;
                 }
 
                 order++;
@@ -293,10 +303,11 @@ namespace LHBBlockScheduler.UI
         ///   BlockReference bên trong (dynamic thì lấy DynamicBlockTableRecord) + visibility của nó.
         /// - Ngược lại -> chính block trong ô là definition.
         /// </summary>
-        private ObjectId ResolveLegendDefinition(ObjectId cellBtrId, out string defName, out string innerVis)
+        private ObjectId ResolveLegendDefinition(ObjectId cellBtrId, out string defName, out string innerVis, out string kind)
         {
             defName = null;
             innerVis = null;
+            kind = "Tĩnh";
             using (var tr = _doc.Database.TransactionManager.StartTransaction())
             {
                 var cellBtr = (BlockTableRecord)tr.GetObject(cellBtrId, OpenMode.ForRead);
@@ -323,7 +334,9 @@ namespace LHBBlockScheduler.UI
                     }
                 }
 
-                defName = ((BlockTableRecord)tr.GetObject(defId, OpenMode.ForRead)).Name;
+                var defBtr = (BlockTableRecord)tr.GetObject(defId, OpenMode.ForRead);
+                defName = defBtr.Name;
+                kind = defBtr.IsDynamicBlock ? "Động" : defBtr.HasAttributeDefinitions ? "Có thuộc tính" : "Tĩnh";
                 Logger.Log($"[LegendTableMapDialog.ResolveLegendDefinition] Ô block '{cellBtr.Name}' ({ents.Count} entity) -> block gốc '{defName}'" +
                            (innerVis != null ? $", visibility='{innerVis}'" : ""));
                 tr.Commit();
@@ -334,10 +347,15 @@ namespace LHBBlockScheduler.UI
         private void Btn_Save_Click(object sender, EventArgs e)
         {
             string libName = _cboLibrary.Text?.Trim();
-            if (string.IsNullOrEmpty(libName)) libName = "default";
+            if (string.IsNullOrEmpty(libName)) libName = TemplateLibraryManager.DefaultSetName;
+            if (libName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                MessageBox.Show(this, "Tên bộ mẫu không hợp lệ (không dùng các ký tự \\ / : * ? \" < > |).", "Block mẫu");
+                return;
+            }
 
             int N = _gridPreview.Rows.Count;
-            Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] Số entry chuẩn bị lưu: N = {N} (thư viện mục tiêu: '{libName}')");
+            Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] Số entry chuẩn bị lưu: N = {N} (bộ block mẫu: '{libName}')");
 
             if (N == 0)
             {
@@ -346,8 +364,11 @@ namespace LHBBlockScheduler.UI
                 return;
             }
 
-            var library = DeviceLibraryManager.LoadLibrary(libName);
-            int addedCount = 0;
+            // v9.1: lưu vào bộ block mẫu (thư viện thiết bị cũ đã bỏ). Block mẫu khớp theo TÊN block gốc -> dòng
+            // không có block trong ô ký hiệu thì không lưu được.
+            var library = TemplateLibraryManager.Load(libName);
+            var defIds = new List<ObjectId>();
+            int addedCount = 0, updatedCount = 0, noBlock = 0;
 
             foreach (DataGridViewRow row in _gridPreview.Rows)
             {
@@ -357,12 +378,11 @@ namespace LHBBlockScheduler.UI
                 string vis = row.Cells["Visibility"].Value?.ToString() ?? "";
                 string unit = row.Cells["Unit"].Value?.ToString() ?? "Cái";
                 string note = row.Cells["Note"].Value?.ToString() ?? "";
-                int order = int.TryParse(row.Cells["Order"].Value?.ToString(), out int o) ? o : library.Entries.Count + 1;
 
                 ObjectId btrId = row.Tag is ObjectId id ? id : ObjectId.Null;
-                ulong hash = 0;
                 string base64Thumb = null;
-                string defName = null;
+                string defName = null, kind = null;
+                ObjectId defId = ObjectId.Null;
 
                 if (!btrId.IsNull && btrId.IsValid)
                 {
@@ -385,17 +405,10 @@ namespace LHBBlockScheduler.UI
                         Logger.Error(ex, $"LegendTableMapDialog: render block trong cell thất bại");
                     }
 
-                    // 2. ShapeHash: PHẢI tính giống hệt BlockExtractor (definition gốc, cùng cache "<tên>_defhash"),
-                    //    nếu không thì hash thư viện và hash lúc quét không bao giờ khớp.
+                    // 2. Block gốc (ô chứa block nhanh A$C bọc 1 block -> block bên trong): tên này dùng để khớp khi quét
                     try
                     {
-                        ObjectId defId = ResolveLegendDefinition(btrId, out defName, out string innerVis);
-                        if (!defId.IsNull && !string.IsNullOrEmpty(defName))
-                        {
-                            string defThumb = ThumbnailGenerator.GetOrCreateThumbnail(_doc, defId, $"{defName}_defhash");
-                            if (!string.IsNullOrEmpty(defThumb))
-                                hash = ThumbnailGenerator.GetHashFromPngFile(defThumb);
-                        }
+                        defId = ResolveLegendDefinition(btrId, out defName, out string innerVis, out kind);
                         if (string.IsNullOrWhiteSpace(vis) && !string.IsNullOrWhiteSpace(innerVis))
                         {
                             Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] '{name}': bảng Legend không ghi chủng loại, lấy từ block trong ô: '{innerVis}'");
@@ -407,60 +420,81 @@ namespace LHBBlockScheduler.UI
                         Logger.Error(ex, $"LegendTableMapDialog: xác định block gốc của ô '{name}' thất bại");
                     }
                 }
-                Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] '{name}' vis='{vis}': block gốc='{defName}', ShapeHash={hash}, ảnh={(base64Thumb != null ? "có" : "KHÔNG")}");
+                Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] '{name}' vis='{vis}': block gốc='{defName}', ảnh={(base64Thumb != null ? "có" : "KHÔNG")}");
 
-                // Cập nhật hoặc thêm mới vào thư viện
-                var existing = library.Entries.FirstOrDefault(entry =>
-                    string.Equals(entry.StandardName, name, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(entry.VisibilityState, vis, StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrEmpty(defName) || defName.StartsWith("*"))
+                {
+                    noBlock++;
+                    Logger.Warn($"[LegendTableMapDialog.Btn_Save_Click] '{name}': không có block trong ô ký hiệu -> không lưu được thành block mẫu");
+                    continue;
+                }
 
+                // Cập nhật hoặc thêm block mẫu (khoá = tên block gốc + chủng loại), thứ tự theo bảng Legend
+                var existing = library.Entries.FirstOrDefault(x =>
+                    string.Equals(x.BlockName, defName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(x.VisibilityState ?? "", vis, StringComparison.OrdinalIgnoreCase));
                 if (existing != null)
                 {
-                    existing.Unit = unit;
+                    existing.DisplayName = name;
+                    existing.Unit = string.IsNullOrWhiteSpace(unit) ? "Cái" : unit;
                     existing.Note = note;
-                    existing.Order = order;
-                    if (hash != 0) existing.ShapeHash = hash;
                     if (!string.IsNullOrEmpty(base64Thumb)) existing.ThumbnailBase64 = base64Thumb;
+                    updatedCount++;
                 }
                 else
                 {
-                    existing = new DeviceLibraryEntry
+                    library.Entries.Add(new TemplateEntry
                     {
-                        StandardName = name,
+                        BlockName = defName,
                         VisibilityState = vis,
-                        Unit = unit,
+                        DisplayName = name,
+                        BlockKind = kind,
+                        Unit = string.IsNullOrWhiteSpace(unit) ? "Cái" : unit,
                         Note = note,
-                        Order = order,
-                        ShapeHash = hash,
-                        ThumbnailBase64 = base64Thumb,
-                        KnownBlockNames = new List<string>()
-                    };
-                    library.Entries.Add(existing);
+                        ThumbnailBase64 = base64Thumb
+                    });
+                    addedCount++;
                 }
-
-                // Ghi nhớ tên block gốc -> khớp theo đường "KnownBlockNames + VisibilityState" kể cả khi hash lệch
-                if (!string.IsNullOrEmpty(defName) && !defName.StartsWith("*"))
-                {
-                    if (existing.KnownBlockNames == null) existing.KnownBlockNames = new List<string>();
-                    if (!existing.KnownBlockNames.Any(n => string.Equals(n, defName, StringComparison.OrdinalIgnoreCase)))
-                        existing.KnownBlockNames.Add(defName);
-                }
-                addedCount++;
+                if (!defId.IsNull && !defIds.Contains(defId)) defIds.Add(defId);
             }
 
-            Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] Đã chuẩn bị {addedCount} entries để ghi vào file thư viện '{libName}'.");
+            Logger.Log($"[LegendTableMapDialog.Btn_Save_Click] Bộ '{libName}': thêm {addedCount}, cập nhật {updatedCount}, bỏ {noBlock} dòng không có block.");
+            if (addedCount + updatedCount == 0)
+            {
+                MessageBox.Show(this, "Không dòng nào có block trong cột Ký hiệu nên không lưu được block mẫu.\nKiểm tra lại cột nào là \"Ký hiệu (Block)\".",
+                    "Block mẫu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             try
             {
-                DeviceLibraryManager.SaveLibrary(library);
-                MessageBox.Show($"Đã lưu thành công {addedCount} thiết bị vào Thư viện '{libName}'.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                TemplateLibraryManager.Save(library);
+                // Chép định nghĩa block vào <bộ>.dwg để chèn được block mẫu ở bản vẽ khác (LHBMAU > Chèn vào bản vẽ).
+                // Lỗi ở bước này không ảnh hưởng thống kê (khớp theo tên) -> chỉ báo
+                string dwgNote;
+                try
+                {
+                    dwgNote = $"{TemplateLibraryManager.SaveBlockDefinitions(_doc, library.Name, defIds)} định nghĩa block";
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, $"[LegendTableMapDialog.Btn_Save_Click] Chép định nghĩa block vào '{TemplateLibraryManager.DwgPath(library.Name)}'");
+                    dwgNote = "CHƯA chép được định nghĩa block, xem log";
+                }
+                MessageBox.Show(this,
+                    $"Đã lưu vào bộ block mẫu '{library.Name}': thêm {addedCount}, cập nhật {updatedCount} block mẫu ({dwgNote})." +
+                    (noBlock > 0 ? $"\nBỏ {noBlock} dòng không có block trong ô ký hiệu." : "") +
+                    (string.Equals(library.Name, SettingsManager.Current.CurrentTemplateSet, StringComparison.OrdinalIgnoreCase)
+                        ? "\n\nLHBSCAN sẽ đặt tên / đơn vị theo bảng Legend."
+                        : $"\n\nChọn bộ '{library.Name}' ở ô \"Bộ block mẫu\" trên bảng thống kê (LHBSCAN) để dùng."),
+                    "Block mẫu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 DialogResult = DialogResult.OK;
                 Close();
             }
             catch (Exception ex)
             {
-                Logger.Error(ex, $"[LegendTableMapDialog.Btn_Save_Click] Ghi thư viện '{libName}' thất bại");
-                MessageBox.Show($"Lỗi khi lưu thư viện: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Logger.Error(ex, $"[LegendTableMapDialog.Btn_Save_Click] Ghi bộ block mẫu '{libName}' thất bại");
+                MessageBox.Show(this, $"Lỗi khi lưu bộ block mẫu: {ex.Message}\nXem log: {Logger.GetLogFilePath()}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

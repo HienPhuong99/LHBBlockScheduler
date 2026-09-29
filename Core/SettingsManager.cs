@@ -7,13 +7,14 @@ namespace LHBBlockScheduler.Core
     public class AppSettings
     {
         public double TableScale { get; set; } = 100.0;
+        /// <summary>Số bit khác nhau tối đa của ShapeHash để coi 2 block giống hình (Gợi ý gộp, Soát lỗi đếm).</summary>
         public int HashThreshold { get; set; } = 5;
         public int ScanDepth { get; set; } = 2;
         public bool CountParentBlocks { get; set; } = false;
         public bool SplitByVisibility { get; set; } = true;
         public bool SplitByLayer { get; set; } = false;
-        public bool OnlyLibraryBlocks { get; set; } = false;
-        public string CurrentLibraryName { get; set; } = "default";
+        /// <summary>true = đã chuyển thư viện thiết bị cũ (Libraries\*.json) sang bộ block mẫu "TV cu ..." (v9.1).</summary>
+        public bool DeviceLibrariesMigrated { get; set; }
         /// <summary>Kiểu bảng xuất: "AutoCAD Table" (mặc định) hoặc "Line + Text (cũ)".</summary>
         public string TableKind { get; set; } = "AutoCAD Table";
         public List<string> Units { get; set; } = new List<string> { "Cái", "Bộ", "Mét", "Cuộn", "Hộp" };
@@ -104,7 +105,6 @@ namespace LHBBlockScheduler.Core
                         if (settings.Units == null || settings.Units.Count == 0) settings.Units = def.Units;
                         if (settings.ColumnVisibility == null) settings.ColumnVisibility = def.ColumnVisibility;
                         if (settings.ColumnHeaders == null) settings.ColumnHeaders = def.ColumnHeaders;
-                        if (string.IsNullOrWhiteSpace(settings.CurrentLibraryName)) settings.CurrentLibraryName = def.CurrentLibraryName;
                         if (settings.TableScale <= 0) settings.TableScale = def.TableScale;
                         if (settings.HashThreshold <= 0) settings.HashThreshold = def.HashThreshold;
                         if (settings.ScanDepth <= 0) settings.ScanDepth = def.ScanDepth;
@@ -119,7 +119,7 @@ namespace LHBBlockScheduler.Core
                         settings.TableTemplates ??= new List<TableTemplate>();
                         if (settings.MmPerDrawingUnit < 0) settings.MmPerDrawingUnit = 0;
                         if (settings.LengthWastePercent < 0) settings.LengthWastePercent = 0;
-                        Logger.Log($"SettingsManager: đã đọc settings.json (Units={settings.Units.Count}, Library='{settings.CurrentLibraryName}', ScanDepth={settings.ScanDepth})");
+                        Logger.Log($"SettingsManager: đã đọc settings.json (Units={settings.Units.Count}, bộ mẫu='{settings.CurrentTemplateSet}', ScanDepth={settings.ScanDepth})");
                         return settings;
                     }
                 }

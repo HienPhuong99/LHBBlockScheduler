@@ -61,6 +61,7 @@ namespace LHBBlockScheduler.Core
 
             int okSymbols = 0, failSymbols = 0;
             ObjectId tableId = ObjectId.Null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
@@ -79,6 +80,8 @@ namespace LHBBlockScheduler.Core
                 tr.AddNewlyCreatedDBObject(tb, true);
                 tableId = tb.ObjectId;
                 Logger.Log($"[TableExporterAcad] Đã tạo Table {nRows}x{nCols}, Handle={tb.Handle}, TableStyle={db.Tablestyle}");
+                SuppressRegen(tb, true);
+                var symbolCache = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
 
                 for (int c = 0; c < nCols; c++) tb.Columns[c].Width = colWidths[c];
                 for (int r = 0; r < nRows; r++) tb.Rows[r].Height = rowHeight;
@@ -125,7 +128,7 @@ namespace LHBBlockScheduler.Core
 
                     try
                     {
-                        var sym = ResolveSymbol(db, tr, item);
+                        var sym = ResolveSymbol(db, tr, item, symbolCache);
                         if (sym.BtrId.IsNull)
                         {
                             failSymbols++;
@@ -179,8 +182,10 @@ namespace LHBBlockScheduler.Core
                     }
                 }
 
+                SuppressRegen(tb, false);
                 tb.GenerateLayout();
                 tb.RecomputeTableBlock(true);
+                Logger.Log($"[TableExporterAcad] Điền bảng xong sau {sw.ElapsedMilliseconds} ms ({symbolCache.Count} block ký hiệu)");
 
                 // Đường dẫn từ mép phải từng dòng thiết bị tới chỗ block trùng (lỗi ở đây không được làm hỏng bảng)
                 try
@@ -272,6 +277,7 @@ namespace LHBBlockScheduler.Core
                 ms.AppendEntity(tb);
                 tr.AddNewlyCreatedDBObject(tb, true);
                 tableId = tb.ObjectId;
+                SuppressRegen(tb, true);
                 for (int c = 0; c < nCols; c++) tb.Columns[c].Width = widths[c];
                 for (int r = 0; r < nRows; r++) tb.Rows[r].Height = rowHeight;
 
@@ -315,6 +321,7 @@ namespace LHBBlockScheduler.Core
                         SetCellFill(tb, tr0, c, tpl.HeaderColorIndex);
                     }
                 }
+                SuppressRegen(tb, false);
                 tb.GenerateLayout();
                 tr.Commit();
             }
@@ -333,6 +340,23 @@ namespace LHBBlockScheduler.Core
                 Logger.Warn($"[TableExporterAcad.ExportGrid] zoom: {ex.Message}");
             }
             return tableId;
+        }
+
+        /// <summary>
+        /// Tắt / bật tính lại hình bảng. Bảng đã nằm trong bản vẽ: mỗi lần sửa 1 ô AutoCAD dựng lại cả bảng -> bảng
+        /// 100 dòng x 8 cột dựng lại cả nghìn lần, xuất rất chậm. Tắt trong lúc điền ô, bật lại trước GenerateLayout.
+        /// Lỗi giữa chừng thì transaction bị huỷ nên không cần try/finally.
+        /// </summary>
+        internal static void SuppressRegen(Table tb, bool suppress)
+        {
+            try
+            {
+                tb.SuppressRegenerateTable(suppress);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[TableExporterAcad] SuppressRegenerateTable({suppress}) lỗi: {ex.Message} -> điền bảng kiểu cũ (chậm hơn)");
+            }
         }
 
         private static void MergeRow(Table tb, int r, int nCols)
@@ -405,7 +429,7 @@ namespace LHBBlockScheduler.Core
         {
             try
             {
-                var sym = ResolveSymbol(db, tr, item);
+                var sym = ResolveSymbol(db, tr, item, null);
                 if (sym.BtrId.IsNull) return false;
                 SetCellBlock(tb, r, c, sym, CellAlignment.MiddleCenter, cellWidth, rowHeight);
                 return true;
@@ -541,7 +565,7 @@ namespace LHBBlockScheduler.Core
         ///  - Không visibility -> 1 BlockReference tới block definition (chèn block bình thường).
         /// Tên cố định theo (block gốc, visibility) nên xuất lại sẽ ghi đè, không sinh block rác.
         /// </summary>
-        private static SymbolInfo ResolveSymbol(Database db, Transaction tr, BlockItem item)
+        private static SymbolInfo ResolveSymbol(Database db, Transaction tr, BlockItem item, Dictionary<string, SymbolInfo> cache)
         {
             // a) Ảnh tuỳ chỉnh
             if (!string.IsNullOrEmpty(item.CustomImagePath) && File.Exists(item.CustomImagePath))
@@ -565,6 +589,8 @@ namespace LHBBlockScheduler.Core
 
             var sym = new SymbolInfo { Mode = instanceId.IsNull ? "Definition" : "InstanceBtr" };
             string symName = "LHB_SYM_" + SanitizeSymbolName(baseName) + "_" + ShortHash(baseName + "|" + (item.VisibilityState ?? ""));
+            // Nhiều dòng cùng block + chủng loại (tách theo layer / thuộc tính, dòng gộp): dựng block ký hiệu 1 lần / lần xuất
+            if (cache != null && cache.TryGetValue(symName, out var built)) return built;
             ObjectId symBtrId = GetOrResetSymbolBtr(db, tr, symName);
 
             List<Entity> entities;
@@ -610,6 +636,7 @@ namespace LHBBlockScheduler.Core
             LogLinetypes(tr, entities, symName, "trước chuẩn hoá");
             NormalizeEntities(entities, symName, out sym.Width, out sym.Height);
             sym.BtrId = symBtrId;
+            if (cache != null) cache[symName] = sym;
             return sym;
         }
 

@@ -37,8 +37,6 @@ namespace LHBBlockScheduler.Core
 
     public static class TableExporter
     {
-        private const string TextStyleName = "LHB_TABLE";
-
         /// <summary>
         /// Xuất bảng thống kê ra Model Space dạng Line + DBText + BlockReference rời rạc, gom vào Group.
         /// </summary>
@@ -128,7 +126,7 @@ namespace LHBBlockScheduler.Core
                         {
                             // Góc DƯỚI-trái của dòng (ảnh vẽ từ đây lên trên)
                             var rowOrigin = insertionPoint + new Vector3d(0, -(rowIndex + 1) * rowHeight, 0);
-                            var imgId = InsertCustomRasterImage(doc, ms, tr, db, item.CustomImagePath, rowOrigin, cellLeft, cellWidth, rowHeight);
+                            var imgId = InsertCustomRasterImage(ms, tr, db, item.CustomImagePath, rowOrigin, cellLeft, cellWidth, rowHeight);
                             if (imgId != ObjectId.Null) createdIds.Add(imgId);
                         }
                         else
@@ -320,9 +318,6 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        internal static ObjectId GetOrCreateTextStyle(Database db, Transaction tr) =>
-            GetOrCreateTextStyle(db, tr, TextStyleName, "arial.ttf");
-
         /// <summary>Kiểu chữ theo font của mẫu bảng (mỗi font 1 kiểu chữ LHB_TABLE_xxx).</summary>
         internal static ObjectId GetOrCreateTextStyle(Database db, Transaction tr, string styleName, string fontFile)
         {
@@ -488,7 +483,7 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        private static ObjectId InsertCustomRasterImage(Document doc, BlockTableRecord ms, Transaction tr, Database db,
+        private static ObjectId InsertCustomRasterImage(BlockTableRecord ms, Transaction tr, Database db,
             string imagePath, Point3d rowOrigin, double cellLeft, double imgColWidth, double rowHeight)
         {
             try

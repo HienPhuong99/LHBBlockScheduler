@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -11,87 +10,12 @@ using LHBBlockScheduler.Models;
 namespace LHBBlockScheduler.Core
 {
     /// <summary>
-    /// Logic Merge / Reorder / Zoom-Highlight. Các hàm Merge/Reorder chỉ thao tác
-    /// trong bộ nhớ (BindingList), không đụng gì tới AutoCAD database.
-    /// Chỉ ZoomAndHighlight là có tương tác với CAD.
+    /// Zoom / highlight block trên bản vẽ theo dòng thống kê (gộp / sắp xếp dòng nằm ở form, chỉ thao tác bộ nhớ).
     /// </summary>
     public static class ScheduleManager
     {
         // Lưu lại các ObjectId đang được highlight để Unhighlight trước khi chọn dòng mới
         private static List<ObjectId> _currentlyHighlighted = new List<ObjectId>();
-
-        public static BlockItem MergeItems(List<BlockItem> selectedItems, string newDisplayName)
-        {
-            if (selectedItems == null || selectedItems.Count == 0)
-                throw new ArgumentException("Danh sách chọn để gộp đang rỗng");
-
-            var merged = new BlockItem
-            {
-                BlockName = string.Join("+", selectedItems.Select(i => i.BlockName)),
-                DisplayName = newDisplayName,
-                Count = selectedItems.Sum(i => i.Count),
-                ObjectIds = selectedItems.SelectMany(i => i.ObjectIds).ToList(),
-                Instances = selectedItems.SelectMany(i => i.Instances).ToList(),
-                IsMergedGroup = true,
-                MergedSourceNames = selectedItems.SelectMany(i =>
-                    i.IsMergedGroup ? i.MergedSourceNames : new List<string> { i.BlockName }).ToList(),
-                Order = selectedItems.Min(i => i.Order)
-            };
-
-            Logger.Log($"ScheduleManager.MergeItems: gộp [{string.Join(", ", selectedItems.Select(i => i.BlockName))}] " +
-                       $"-> '{newDisplayName}', tổng SL={merged.Count}");
-            return merged;
-        }
-
-        public static void RemoveItemsAndReorder(BindingList<BlockItem> list, List<BlockItem> itemsToRemove)
-        {
-            foreach (var it in itemsToRemove)
-                list.Remove(it);
-            ReassignOrder(list);
-        }
-
-        public static void AddAndReorder(BindingList<BlockItem> list, BlockItem newItem)
-        {
-            list.Add(newItem);
-            ReassignOrder(list.OrderBy(i => i.Order).ToList(), list);
-        }
-
-        public static void MoveUp(BindingList<BlockItem> list, BlockItem item)
-        {
-            var sorted = list.OrderBy(i => i.Order).ToList();
-            int idx = sorted.IndexOf(item);
-            if (idx <= 0) return;
-            (sorted[idx].Order, sorted[idx - 1].Order) = (sorted[idx - 1].Order, sorted[idx].Order);
-            ReassignOrder(sorted, list);
-            Logger.Log($"ScheduleManager.MoveUp: '{item.DisplayName}' lên vị trí {idx - 1}");
-        }
-
-        public static void MoveDown(BindingList<BlockItem> list, BlockItem item)
-        {
-            var sorted = list.OrderBy(i => i.Order).ToList();
-            int idx = sorted.IndexOf(item);
-            if (idx < 0 || idx >= sorted.Count - 1) return;
-            (sorted[idx].Order, sorted[idx + 1].Order) = (sorted[idx + 1].Order, sorted[idx].Order);
-            ReassignOrder(sorted, list);
-            Logger.Log($"ScheduleManager.MoveDown: '{item.DisplayName}' xuống vị trí {idx + 1}");
-        }
-
-        /// <summary>Đánh lại Order 0..n-1 theo đúng thứ tự hiện có trong list (không đổi thứ tự tương đối).</summary>
-        public static void ReassignOrder(IEnumerable<BlockItem> list)
-        {
-            int i = 0;
-            foreach (var item in list.OrderBy(x => x.Order))
-                item.Order = i++;
-        }
-
-        /// <summary>Đánh lại Order theo 1 danh sách đã sort sẵn (sortedSource), rồi áp lên targetList gốc.</summary>
-        private static void ReassignOrder(List<BlockItem> sortedSource, BindingList<BlockItem> targetList)
-        {
-            int i = 0;
-            foreach (var item in sortedSource)
-                item.Order = i++;
-            // BindingList tự raise ListChanged khi property Order đổi (nếu item implement INotifyPropertyChanged)
-        }
 
         /// <summary>
         /// Zoom AutoCAD tới vùng bao (extents) của các Block thuộc dòng được chọn, và highlight chúng.

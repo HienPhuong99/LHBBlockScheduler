@@ -27,15 +27,39 @@
 1. `dotnet build -c Release`, sửa hết lỗi compile.
 2. `powershell -ExecutionPolicy Bypass -File build.ps1` -> `Dist\LHBBlockScheduler\` (MD5 trong build-info.txt).
 3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium",
-   `Dist\LHBBlockScheduler_<yyyyMMdd>_vN_Premium.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN_Premium.md`.
+   `Dist\LHBBlockScheduler_<yyyyMMdd>_vN_Premium.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN_Premium.md` (vN có thể là v9.1).
+   Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md.
    (v8 trở về trước: `Dist\LHBBlockScheduler_<yyyyMMdd>_vN.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN.md`)
    (theo mẫu các bản trước: bản này sửa gì, MD5, bảng bước test, cần gửi về gì), gửi cả 2 file cho user.
 4. (Đổi 29/09/2026 theo user) KHÔNG gửi demo, KHÔNG hỏi ý giữa chừng: tự chọn phương án tốt nhất, làm xong trọn
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (29/09/2026): bản v9 Premium đã phát hành, CHƯA có kết quả test
+## Trạng thái (29/09/2026): bản v9.1 Premium đã phát hành, CHƯA có kết quả test (v9 cũng chưa)
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+v9.1 Premium (MD5 `581F5A95D57EE036FED3F3DC01CF00DD`, `Dist\HUONG_DAN_TEST_20260929_v9.1_Premium.md`): tối ưu + bỏ phần thừa,
+user hỏi có cần thư viện GitHub không -> KHÔNG thêm NuGet/DLL ngoài vào add-in (chạy trong acad.exe, dễ xung đột DLL
+như System.Text.Json; JSON/Excel/Ribbon đã tự viết bằng thư viện .NET có sẵn). Thay đổi:
+- Tốc độ: `TableExporterAcad.SuppressRegen` (Table.SuppressRegenerateTable) khi điền bảng / `TableUpdater` / `ExportGrid`;
+  block ký hiệu dựng 1 lần / lần xuất (`ResolveSymbol` cache theo symName). `BlockExtractor`: `ScanCache` (khung bao +
+  danh sách block con theo BTR), lọc `ObjectId.ObjectClass` (`BlockExtractor.BlockRefClass`) trước khi mở,
+  `ReadDynamic` đọc DynamicBlockReferencePropertyCollection 1 lần (ReadVisibility dùng chung). `ThumbnailGenerator`:
+  nhớ ShapeHash theo file (`ForgetHash` khi render lại), LockBits thay GetPixel. `Logger`: giữ StreamWriter mở,
+  AutoFlush, đóng sau 1 giây rảnh (Timer), log > 5 MB -> log.old.txt; đọc log đang giữ phải dùng `Logger.ReadTail`
+  (File.ReadAllLines báo IOException). `DuplicateFinder.Detect` chỉ log chi tiết 30 nhóm; `BlockInstanceRef.Group`.
+  `LicenseManager.Current` nhớ kết quả theo mã + ngày.
+- Form: ảnh ký hiệu qua CellFormatting + `_thumbCache` (không còn RefreshThumbnailImages), DoubleBuffered
+  (`UiKit.DoubleBuffer`), tooltip qua CellToolTipTextNeeded, `ReplaceAllItems` tắt RaiseListChangedEvents rồi reset 1 lần,
+  tìm kiếm trễ 250 ms + `_grid.CurrentCell = null` trước khi ẩn dòng (lỗi v9: InvalidOperationException "Row associated
+  with the currency manager's position cannot be made invisible", đã tái hiện bằng chương trình thử WinForms), lọc lại
+  sau mỗi ListChanged Reset. Toolbar còn 2 hàng. `UiKit.PromptText` dùng chung.
+- Bỏ thư viện thiết bị cũ (DeviceLibraryManager, nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV, settings
+  OnlyLibraryBlocks / CurrentLibraryName). `TemplateLibraryManager.MigrateDeviceLibraries` chuyển 1 lần
+  `%APPDATA%\...\Libraries\*.json` thành bộ mẫu "TV cu <tên>" theo KnownBlockNames (settings DeviceLibrariesMigrated).
+  `LHBLEGEND` lưu vào bộ block mẫu (khoá tên block gốc + chủng loại) + WblockClone định nghĩa vào <bộ>.dwg.
+  Không làm khớp theo ShapeHash cho block mẫu (dễ đặt nhầm tên thiết bị giống hình) -> chỉ khớp tên.
+  Bỏ lệnh LHBSCANTEST, LHBTHUMBTEST, hàm chết ScheduleManager.MergeItems/MoveUp/..., Logger.ClearLog, TableTemplate.Clone.
+Cần xác nhận khi có kết quả test v9.1: thời gian quét / xuất bảng trong log so với v9; tìm kiếm không lỗi; bộ "TV cu ...".
 v9 Premium (MD5 `ACB0AF84E5D92D05678F24073D95D6BD`, `Dist\HUONG_DAN_TEST_20260929_v9_Premium.md`, tính năng: `TINH_NANG_PREMIUM.md`).
 User giao tự làm hết 13 tính năng, không hỏi, không demo. Thiết kế:
 - Cột Premium trên form = cột unbound tên "zone:<khu>" / "attr:<khoá>", giá trị trong `BlockItem.ExtraValues`,

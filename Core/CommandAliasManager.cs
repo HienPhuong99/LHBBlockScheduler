@@ -45,7 +45,7 @@ namespace LHBBlockScheduler.Core
         {
             ("LHBSCAN", "Quét chọn block, mở bảng thống kê", false),
             ("LHBMAU", "Thư viện block mẫu: thêm / xoá / sắp xếp / chèn block mẫu", false),
-            ("LHBLEGEND", "Quét bảng chú thích (Table) có sẵn vào thư viện thiết bị", false),
+            ("LHBLEGEND", "Quét bảng chú thích (Table) có sẵn vào bộ block mẫu", false),
             ("LHBDUPCLEAR", "Xoá vòng đỏ / đường dẫn đánh dấu block trùng", false),
             ("LHBCAPNHAT", "[Premium] Cập nhật bảng đã xuất sau khi sửa bản vẽ (ô đổi tô đỏ)", false),
             ("LHBKHUVUC", "[Premium] Khai báo tầng / khu vực: bảng có cột SL từng khu", false),
@@ -65,8 +65,6 @@ namespace LHBBlockScheduler.Core
             ("LHBLOG", "Mở file nhật ký log.txt", true),
             ("LHBLOGPATH", "In đường dẫn file log.txt", true),
             ("LHBCLEARCACHE", "Xoá bộ nhớ đệm ảnh ký hiệu", true),
-            ("LHBSCANTEST", "Quét nhanh, in kết quả ra dòng lệnh (kiểm tra)", true),
-            ("LHBTHUMBTEST", "Kiểm tra ảnh ký hiệu của 1 block (kiểm tra)", true),
         };
 
         /// <summary>Phím tắt mặc định khi settings.json chưa có CommandAliases.</summary>

@@ -35,12 +35,7 @@ namespace LHBBlockScheduler
                 var items = BlockExtractor.ExtractFromSelection(doc, null, onlyTemplate ? template : null);
                 if (items == null) return;
 
-                // Tự động áp default library nếu có, để user không phải Quy hoạch tay mỗi lần
-                var defaultLib = DeviceLibraryManager.LoadLibrary("default");
-                if (defaultLib != null && defaultLib.Entries.Count > 0)
-                    items = DeviceLibraryManager.ApplyLibrary(items, defaultLib, SettingsManager.Current.HashThreshold);
-
-                // Tên thống kê / đơn vị / thứ tự theo block mẫu (ưu tiên hơn thư viện cũ)
+                // Tên thống kê / đơn vị / thứ tự theo block mẫu
                 items = TemplateLibraryManager.Apply(items, template, onlyTemplate);
                 if (items.Count == 0)
                 {
@@ -229,83 +224,7 @@ namespace LHBBlockScheduler
             }
         }
 
-        /// <summary>Lệnh test nhanh: quét và chỉ in kết quả ra command line, không mở Form.
-        /// Dùng để kiểm tra module trích xuất Block hoạt động đúng trước khi test UI.</summary>
-        [CommandMethod("LHBSCANTEST")]
-        public void ScanTestOnly()
-        {
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            var ed = doc.Editor;
-
-            try
-            {
-                var items = BlockExtractor.ExtractFromSelection(doc);
-                if (items == null)
-                {
-                    ed.WriteMessage("\nĐã huỷ chọn.");
-                    return;
-                }
-
-                DuplicateFinder.Detect(items, SettingsManager.Current.DuplicateTolerance, SettingsManager.Current.DuplicateOverlapPercent);
-                ed.WriteMessage($"\n--- Kết quả quét: {items.Count} loại Block ---");
-                foreach (var item in items)
-                    ed.WriteMessage($"\n{item.BlockName}" + (string.IsNullOrEmpty(item.VisibilityState) ? "" : $" [{item.VisibilityState}]") + $" : {item.Count}" +
-                                    (item.DuplicateExtra > 0 ? $" (trùng / che lấp: thừa {item.DuplicateExtra} tại {item.DuplicateGroups.Count} chỗ)" : ""));
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "LHBSCANTEST");
-                ed.WriteMessage($"\nLỗi - xem chi tiết tại {Logger.GetLogFilePath()}");
-            }
-        }
-
-        /// <summary>Test riêng lẻ module Thumbnail - PHẦN RỦI RO CAO NHẤT.
-        /// Chọn 1 block, xuất PNG, tự mở file lên xem ngay.</summary>
-        [CommandMethod("LHBTHUMBTEST")]
-        public void ThumbnailTest()
-        {
-            var doc = Application.DocumentManager.MdiActiveDocument;
-            if (doc == null) return;
-            var ed = doc.Editor;
-
-            try
-            {
-                var peo = new PromptEntityOptions("\nChọn 1 Block để test xuất ảnh: ");
-                peo.SetRejectMessage("\nPhải chọn 1 Block Reference.");
-                peo.AddAllowedClass(typeof(BlockReference), true);
-                var per = ed.GetEntity(peo);
-                if (per.Status != PromptStatus.OK) return;
-
-                string blockName;
-                using (var tr = doc.Database.TransactionManager.StartTransaction())
-                {
-                    var br = (BlockReference)tr.GetObject(per.ObjectId, OpenMode.ForRead);
-                    var btr = (BlockTableRecord)tr.GetObject(br.DynamicBlockTableRecord, OpenMode.ForRead);
-                    blockName = btr.Name;
-                    tr.Commit();
-                }
-
-                ed.WriteMessage($"\nĐang render thumbnail cho '{blockName}'...");
-                string pngPath = ThumbnailGenerator.GetOrCreateThumbnail(doc, blockName);
-
-                if (pngPath == null)
-                {
-                    ed.WriteMessage($"\nTHẤT BẠI - xem chi tiết log tại: {Logger.GetLogFilePath()}");
-                    return;
-                }
-
-                ed.WriteMessage($"\nOK -> {pngPath}");
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(pngPath) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "LHBTHUMBTEST");
-                ed.WriteMessage($"\nLỗi - xem chi tiết tại {Logger.GetLogFilePath()}");
-            }
-        }
-
-        /// <summary>Quét bảng Legend (Table object) có sẵn trên bản vẽ vào Thư viện thiết bị.</summary>
+        /// <summary>Quét bảng Legend (Table object) có sẵn trên bản vẽ vào bộ block mẫu.</summary>
         [CommandMethod("LHBLEGEND")]
         public void ScanLegendTable()
         {
@@ -399,6 +318,7 @@ namespace LHBBlockScheduler
                     Application.DocumentManager.MdiActiveDocument.Editor.WriteMessage("\nChưa có file log.");
                     return;
                 }
+                Logger.Flush(); // đóng file log đang giữ để Notepad mở được
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", path) { UseShellExecute = true });
             }
             catch (Exception ex)
@@ -614,7 +534,9 @@ namespace LHBBlockScheduler
             AppendItemStatus(sb, "Local log.txt (cạnh DLL)", Logger.LocalLogFilePath);
             AppendItemStatus(sb, "AppData log.txt", Logger.AppDataLogFilePath);
             AppendItemStatus(sb, "Settings file (settings.json)", SettingsManager.SettingsFilePath);
-            AppendDirStatus(sb, "Thư mục Libraries", DeviceLibraryManager.LibrariesFolder);
+            AppendDirStatus(sb, "Thư mục block mẫu", TemplateLibraryManager.Folder);
+            AppendDirStatus(sb, "Thư mục block mẫu dự phòng", TemplateLibraryManager.BackupFolder);
+            AppendDirStatus(sb, "Thư viện thiết bị cũ", TemplateLibraryManager.OldLibrariesFolder);
             AppendDirStatus(sb, "Thư mục Thumbs cache", ThumbnailGenerator.ThumbCacheFolder);
             AppendDirStatus(sb, "Thư mục CustomImages", ThumbnailGenerator.CustomImagesFolder);
             sb.AppendLine();
@@ -630,32 +552,26 @@ namespace LHBBlockScheduler
             }
             sb.AppendLine();
 
-            // 4. Danh sách file trong Libraries và NỘI DUNG từng file JSON
-            sb.AppendLine("--- 4. NỘI DUNG TOÀN BỘ FILE TRONG THƯ VIỆN (LIBRARIES) ---");
-            string libFolder = DeviceLibraryManager.LibrariesFolder;
-            if (Directory.Exists(libFolder))
+            // 4. Các bộ block mẫu: tóm tắt từng block mẫu (không in ảnh base64 cho gọn file)
+            sb.AppendLine("--- 4. THƯ VIỆN BLOCK MẪU ---");
+            try
             {
-                var jsonFiles = Directory.GetFiles(libFolder, "*.json");
-                sb.AppendLine($"Tìm thấy {jsonFiles.Length} file .json trong '{libFolder}':");
-                foreach (var jf in jsonFiles)
+                sb.AppendLine($"Bộ đang dùng: '{SettingsManager.Current.CurrentTemplateSet}', chỉ quét block mẫu = {!SettingsManager.Current.ScanAllBlocks}, " +
+                              $"đã chuyển thư viện cũ = {SettingsManager.Current.DeviceLibrariesMigrated}");
+                foreach (var set in TemplateLibraryManager.ListSets())
                 {
-                    var fi = new FileInfo(jf);
+                    var lib = TemplateLibraryManager.Load(set);
+                    string dwg = TemplateLibraryManager.DwgPath(set);
                     sb.AppendLine();
-                    sb.AppendLine($"  === File: {fi.Name} ({fi.Length:N0} bytes, sửa đổi: {fi.LastWriteTime:yyyy-MM-dd HH:mm:ss}) ===");
-                    try
-                    {
-                        string jsonText = File.ReadAllText(jf, Encoding.UTF8);
-                        sb.AppendLine(jsonText);
-                    }
-                    catch (Exception ex)
-                    {
-                        sb.AppendLine($"  [LỖI ĐỌC FILE: {ex.Message}]");
-                    }
+                    sb.AppendLine($"  === Bộ '{set}': {lib.Entries.Count} block mẫu, file .dwg {(File.Exists(dwg) ? $"{new FileInfo(dwg).Length:N0} bytes" : "CHƯA CÓ")} ===");
+                    foreach (var e in lib.Entries)
+                        sb.AppendLine($"  {e.BlockName}" + (string.IsNullOrEmpty(e.VisibilityState) ? "" : $" [{e.VisibilityState}]") +
+                                      $" -> '{e.DisplayName}', {e.Unit}, {e.BlockKind}, ảnh={(string.IsNullOrEmpty(e.ThumbnailBase64) ? "KHÔNG" : "có")}");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                sb.AppendLine($"Thư mục Libraries chưa tồn tại trên đĩa: '{libFolder}'");
+                sb.AppendLine($"[LỖI ĐỌC THƯ VIỆN BLOCK MẪU: {ex.Message}]");
             }
             sb.AppendLine();
 
@@ -667,10 +583,8 @@ namespace LHBBlockScheduler
                 sb.AppendLine($"Nguồn log: {activeLogPath}");
                 try
                 {
-                    var logLines = File.ReadAllLines(activeLogPath, Encoding.UTF8);
-                    int skipCount = Math.Max(0, logLines.Length - 200);
-                    var tailLines = logLines.Skip(skipCount);
-                    foreach (var l in tailLines)
+                    // Đọc chia sẻ: Logger có thể đang giữ file log
+                    foreach (var l in Logger.ReadTail(activeLogPath, 200))
                     {
                         sb.AppendLine(l);
                     }

@@ -159,7 +159,7 @@ namespace LHBBlockScheduler
                 ed?.WriteMessage($"\n  - Thời gian build: {info.BuildTime}");
                 ed?.WriteMessage($"\n  - Kích thước DLL : {info.DllSize:N0} bytes");
                 ed?.WriteMessage($"\n  - Mã băm MD5    : {info.Md5Hash}" + (info.Md5Mismatch ? " [KHÔNG KHỚP BUILD-INFO!]" : " [KHỚP]"));
-                ed?.WriteMessage("\n  - Lệnh khả dụng : LHBSCAN, LHBSCANTEST, LHBTHUMBTEST, LHBLEGEND,");
+                ed?.WriteMessage("\n  - Lệnh khả dụng : LHBSCAN, LHBMAU, LHBLENH, LHBLEGEND, LHBDIAG,");
                 ed?.WriteMessage("\n                    LHBCLEARCACHE, LHBLOG, LHBLOGPATH, LHBRELOAD, LHBVERSION");
                 ed?.WriteMessage("\n==================================================================\n");
             }

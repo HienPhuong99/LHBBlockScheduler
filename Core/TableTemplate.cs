@@ -38,8 +38,6 @@ namespace LHBBlockScheduler.Core
         public double EffectiveTextFactor => TextHeightFactor > 0 ? TextHeightFactor : 1.0;
         public double EffectiveRowFactor => RowHeightFactor > 0 ? RowHeightFactor : 1.0;
 
-        public TableTemplate Clone() => (TableTemplate)MemberwiseClone();
-
         /// <summary>Mẫu đang chọn trong settings; chưa có thì mẫu mặc định (giống bảng các bản trước).</summary>
         public static TableTemplate Current
         {

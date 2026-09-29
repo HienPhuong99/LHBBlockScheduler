@@ -73,6 +73,7 @@ namespace LHBBlockScheduler.UI
                 RowTemplate = { Height = 28 },
                 BackgroundColor = SystemColors.Window
             };
+            UiKit.DoubleBuffer(_grid);
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colCmd", HeaderText = "Lệnh", Width = 120, ReadOnly = true });
             var colAlias = new DataGridViewTextBoxColumn { Name = "colAlias", HeaderText = "Phím tắt", Width = 110 };
             colAlias.DefaultCellStyle.Font = new Font(_grid.Font, FontStyle.Bold);

@@ -3,8 +3,8 @@
 Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước...): quét chọn, gộp nhóm, thư viện block mẫu, tìm block trùng, xuất bảng AutoCAD Table / Excel.
 
 - Hướng dẫn sử dụng: [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md)
-- Tính năng Premium (v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
-- Hướng dẫn test từng bản: thư mục [Dist](Dist)
+- Tính năng Premium (từ v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
+- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.1 Premium — tối ưu tốc độ, gộp thư viện thiết bị cũ vào thư viện block mẫu)
 - Bản đóng gói (zip): mục **Releases** của repo
 
 ## Tính năng chính
@@ -24,7 +24,8 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 ## Build (lập trình viên)
 
-- .NET SDK + .NET Framework 4.8 Developer Pack. Target `net48`, `x64`.
+- .NET SDK + .NET Framework 4.8 Developer Pack. Target `net48`, `x64`. Không dùng NuGet / thư viện ngoài trong DLL add-in:
+  mọi thứ (JSON, Excel, Ribbon) viết bằng thư viện có sẵn của .NET Framework để không xung đột DLL với AutoCAD.
 - Chép 3 file `accoremgd.dll`, `acdbmgd.dll`, `acmgd.dll` từ thư mục cài AutoCAD 2021 vào `libs\` (không đưa lên repo vì là file của Autodesk). Giữ `<Private>false</Private>`.
 - `dotnet build -c Release`, đóng gói: `powershell -ExecutionPolicy Bypass -File build.ps1` → `Dist\LHBBlockScheduler\`.
 - `tools\LHBKeyGen`: công cụ tạo mã kích hoạt Premium. Khoá bí mật `LHB_private_key.xml` **không** nằm trong repo.

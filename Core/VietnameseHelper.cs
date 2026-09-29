@@ -61,15 +61,10 @@ namespace LHBBlockScheduler.Core
             return s.Trim();
         }
 
-        /// <summary>So khớp không phân biệt hoa/thường và không phân biệt dấu.</summary>
-        public static bool ContainsIgnoreCaseAndDiacritics(string source, string keyword)
-        {
-            if (string.IsNullOrEmpty(keyword)) return true;
-            if (string.IsNullOrEmpty(source)) return false;
-
-            string a = RemoveDiacritics(source).ToLowerInvariant();
-            string b = RemoveDiacritics(keyword).ToLowerInvariant();
-            return a.Contains(b);
-        }
+        /// <summary>
+        /// Chuỗi dùng để so khớp tìm kiếm không dấu, không phân biệt hoa thường ("Công tắc" -> "cong tac"):
+        /// Fold(nguồn).Contains(Fold(từ khoá)).
+        /// </summary>
+        public static string Fold(string s) => string.IsNullOrEmpty(s) ? "" : RemoveDiacritics(s).ToLowerInvariant();
     }
 }

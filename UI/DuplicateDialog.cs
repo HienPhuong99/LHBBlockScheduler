@@ -77,6 +77,7 @@ namespace LHBBlockScheduler.UI
                 MultiSelect = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
+            UiKit.DoubleBuffer(_grid);
             _grid.Columns.Add("colName", "Tên thiết bị");
             _grid.Columns.Add("colVis", "Chủng loại");
             _grid.Columns.Add("colX", "X");

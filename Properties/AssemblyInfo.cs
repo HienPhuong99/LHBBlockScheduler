@@ -9,8 +9,8 @@ using LHBBlockScheduler;
 [assembly: AssemblyProduct("LHBBlockScheduler")]
 [assembly: AssemblyCopyright("")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("9.1.0.0")]
+[assembly: AssemblyFileVersion("9.1.0.0")]
 
 // Đăng ký toàn bộ command trong Commands.cs với AutoCAD
 [assembly: CommandClass(typeof(Commands))]
@@ -31,7 +31,7 @@ namespace LHBBlockScheduler
             {
                 UI.RibbonBuilder.Init();
                 Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument?.Editor
-                    .WriteMessage($"\n[LHB] v9 Premium - {Core.LicenseManager.StatusText}. Tab Ribbon 'LHB Premium', gõ LHBPALETTE mở bảng công cụ.");
+                    .WriteMessage($"\n[LHB] v9.1 Premium - {Core.LicenseManager.StatusText}. Tab Ribbon 'LHB Premium', gõ LHBPALETTE mở bảng công cụ.");
             }
             catch (System.Exception ex)
             {
@@ -84,6 +84,7 @@ namespace LHBBlockScheduler
         public void Terminate()
         {
             Core.Logger.Log("=== LHBBlockScheduler đã unload ===");
+            Core.Logger.Flush();
         }
     }
 }

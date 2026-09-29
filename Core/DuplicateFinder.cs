@@ -20,6 +20,7 @@ namespace LHBBlockScheduler.Core
     public static class DuplicateFinder
     {
         public const string MarkerLayerName = "LHB_BLOCK_TRUNG";
+        private const int MaxDetailLogs = 30;
 
         // ============================== TÌM TRÙNG ==============================
 
@@ -39,6 +40,7 @@ namespace LHBBlockScheduler.Core
                 foreach (var inst in item.Instances)
                 {
                     inst.Item = item;
+                    inst.Group = null;
                     all.Add(inst);
                 }
             }
@@ -52,18 +54,21 @@ namespace LHBBlockScheduler.Core
                 groups.AddRange(FindGroups(byName.Key, list, tol, minOverlap, ref pairsChecked));
             }
 
-            int extra = 0, nested = 0, overlapGroups = 0;
+            int extra = 0, nested = 0, overlapGroups = 0, logged = 0;
             foreach (var g in groups)
             {
                 foreach (var it in g.Items) it.DuplicateGroups.Add(g);
                 extra += g.Extra;
                 nested += g.Instances.Count(i => !i.IsTopLevel);
                 if (g.HasOverlap) overlapGroups++;
+                // Form tính lại trùng sau mỗi thao tác -> chỉ log chi tiết 30 vị trí đầu, không làm phình log
+                if (++logged > MaxDetailLogs) continue;
                 Logger.Log($"[DuplicateFinder] '{g.BlockName}': {g.Instances.Count} block trùng tại ({g.Position.X:0.##}, {g.Position.Y:0.##}), " +
                            (g.HasOverlap ? $"che lấp tới {g.MaxOverlap:P0}" : "cùng điểm chèn") +
                            $", chủng loại [{string.Join(" / ", g.Items.Select(i => i.VisibilityState ?? "").Distinct())}]" +
                            $", handle [{string.Join(", ", g.Instances.Select(i => i.Path.Last().Handle))}], giữ {g.Keep.Path.Last().Handle}");
             }
+            if (logged > MaxDetailLogs) Logger.Log($"[DuplicateFinder] ... và {logged - MaxDetailLogs} vị trí trùng khác (không ghi chi tiết)");
 
             Logger.Log($"[DuplicateFinder.Detect] sai số={tol}, che lấp≥{minOverlap:P0}: {all.Count} block, {pairsChecked} cặp cần so, " +
                        $"{groups.Count} vị trí trùng ({overlapGroups} do che lấp), thừa {extra} block ({nested} block nằm trong block cha)");
@@ -143,7 +148,11 @@ namespace LHBBlockScheduler.Core
                     HasOverlap = hasOverlap.Contains(cluster.Key),
                     MaxOverlap = overlapOf.TryGetValue(cluster.Key, out var ov) ? ov : 0
                 };
-                foreach (int k in members) g.Instances.Add(list[k]);
+                foreach (int k in members)
+                {
+                    g.Instances.Add(list[k]);
+                    list[k].Group = g;
+                }
 
                 // Tâm + bán kính theo khung bao chung (bỏ phần nới sai số)
                 double mnX = members.Min(k => boxes[k].MinX) + tol / 2, mxX = members.Max(k => boxes[k].MaxX) - tol / 2;

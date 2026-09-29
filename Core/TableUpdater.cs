@@ -186,6 +186,7 @@ namespace LHBBlockScheduler.Core
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var tb = (Table)tr.GetObject(tableId, OpenMode.ForWrite);
+                TableExporterAcad.SuppressRegen(tb, true);
                 ObjectId styleId = tb.Cells[info.FirstDataRow, 0].TextStyleId ?? ObjectId.Null;
                 double textH = info.TextHeight > 0 ? info.TextHeight : (tb.Cells[info.FirstDataRow, 0].TextHeight ?? 250);
                 double rowH = info.RowHeight > 0 ? info.RowHeight : tb.Rows[info.FirstDataRow].Height;
@@ -274,6 +275,7 @@ namespace LHBBlockScheduler.Core
 
                 info.UpdatedAt = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
                 DrawingHelper.WriteExtString(tr, tb, ExtKey, JsonHelper.Serialize(info));
+                TableExporterAcad.SuppressRegen(tb, false);
                 tb.GenerateLayout();
                 tr.Commit();
             }

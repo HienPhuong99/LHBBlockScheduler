@@ -151,45 +151,75 @@ namespace LHBBlockScheduler.Core
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 var ms = (BlockTableRecord)tr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(db), OpenMode.ForRead);
-                var rx = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
                 foreach (ObjectId id in ms)
-                    if (id.ObjectClass.IsDerivedFrom(rx)) ids.Add(id);
+                    if (id.ObjectClass.IsDerivedFrom(BlockRefClass)) ids.Add(id);
                 tr.Commit();
             }
             return ids;
         }
 
+        private static Autodesk.AutoCAD.Runtime.RXClass _blockRefClass;
+
+        /// <summary>RXClass của BlockReference: lọc ObjectId theo loại mà không phải mở đối tượng ra.</summary>
+        internal static Autodesk.AutoCAD.Runtime.RXClass BlockRefClass =>
+            _blockRefClass ??= Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
+
+        /// <summary>
+        /// Bộ nhớ đệm trong 1 lần quét: khung bao theo BTR, danh sách block con theo BTR (định nghĩa block không đổi
+        /// trong lúc quét -> 5000 đầu phun cùng định nghĩa chỉ duyệt nội dung định nghĩa 1 lần thay vì 5000 lần).
+        /// </summary>
+        private sealed class ScanCache
+        {
+            public readonly HashSet<ObjectId> Visiting = new HashSet<ObjectId>();
+            public readonly Dictionary<ObjectId, Extents3d?> Extents = new Dictionary<ObjectId, Extents3d?>();
+            public readonly Dictionary<ObjectId, List<ObjectId>> ChildRefs = new Dictionary<ObjectId, List<ObjectId>>();
+        }
+
         private static List<ScannedRef> ScanRefs(Database db, IEnumerable<ObjectId> rootIds, ExtractionOptions options)
         {
             var scannedRefs = new List<ScannedRef>();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var visiting = new HashSet<ObjectId>();
-                var extCache = new Dictionary<ObjectId, Extents3d?>();
+                var cache = new ScanCache();
+                int roots = 0;
 
                 foreach (var id in rootIds)
                 {
-                    if (id.IsNull || !id.IsValid || id.IsErased) continue;
-                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (!(ent is BlockReference br)) continue;
+                    // Lọc theo loại trước khi mở: vùng chọn có hàng vạn nét / chữ không phải block
+                    if (id.IsNull || !id.IsValid || id.IsErased || !id.ObjectClass.IsDerivedFrom(BlockRefClass)) continue;
+                    if (!(tr.GetObject(id, OpenMode.ForRead) is BlockReference br)) continue;
+                    roots++;
 
                     var pathSoFar = new List<ObjectId> { br.ObjectId };
-                    WalkBlockReference(tr, br, Matrix3d.Identity, 0, options.MaxDepth, visiting, pathSoFar, scannedRefs, extCache);
+                    WalkBlockReference(tr, br, Matrix3d.Identity, 0, options.MaxDepth, pathSoFar, scannedRefs, cache);
                 }
 
                 int noCorners = scannedRefs.Count(r => r.Corners == null);
-                Logger.Log($"BlockExtractor: quét {scannedRefs.Count} block, {extCache.Count} định nghĩa block khác nhau" +
+                Logger.Log($"BlockExtractor: quét {roots} block gốc -> {scannedRefs.Count} block, {cache.Extents.Count} định nghĩa block khác nhau, " +
+                           $"{sw.ElapsedMilliseconds} ms" +
                            (noCorners > 0 ? $", {noCorners} block không tính được khung bao (chỉ so trùng theo điểm chèn)" : ""));
                 tr.Commit();
             }
             return scannedRefs;
         }
 
-        /// <summary>
-        /// Thuộc tính (khoá "A:TAG") và tham số dynamic block đang hiện, trừ Visibility (khoá "D:Tên") - Premium P5.
-        /// null nếu không có gì.
-        /// </summary>
+        /// <summary>Block con (BlockReference) nằm trực tiếp trong 1 BTR, nhớ theo BTR.</summary>
+        private static List<ObjectId> ChildBlockRefs(Transaction tr, ObjectId btrId, ScanCache cache)
+        {
+            if (cache.ChildRefs.TryGetValue(btrId, out var list)) return list;
+            list = new List<ObjectId>();
+            if (tr.GetObject(btrId, OpenMode.ForRead) is BlockTableRecord btr && !btr.IsLayout)
+            {
+                foreach (ObjectId id in btr)
+                    if (id.ObjectClass.IsDerivedFrom(BlockRefClass)) list.Add(id);
+            }
+            cache.ChildRefs[btrId] = list;
+            return list;
+        }
+
+        /// <summary>Thuộc tính "A:TAG" của block (null nếu không có) - Premium P5.</summary>
         private static Dictionary<string, string> ReadAttributes(Transaction tr, BlockReference br)
         {
             Dictionary<string, string> d = null;
@@ -202,27 +232,56 @@ namespace LHBBlockScheduler.Core
                     string text = ar.IsMTextAttribute ? VietnameseHelper.CleanMTextString(ar.TextString) : ar.TextString;
                     d["A:" + ar.Tag.ToUpperInvariant()] = (text ?? "").Trim();
                 }
-                if (br.IsDynamicBlock)
-                {
-                    foreach (DynamicBlockReferenceProperty p in br.DynamicBlockReferencePropertyCollection)
-                    {
-                        if (!p.Show || string.IsNullOrEmpty(p.PropertyName)) continue;
-                        if (p.PropertyName.IndexOf("Visibility", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                        object v = p.Value;
-                        string s;
-                        if (v is double dv) s = dv.ToString("0.###");
-                        else if (v is short || v is int || v is long || v is string) s = v.ToString();
-                        else continue; // Point3d, ObjectId... không hiện được thành cột
-                        d ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        d["D:" + p.PropertyName] = s;
-                    }
-                }
             }
             catch (Exception ex)
             {
                 Logger.Warn($"BlockExtractor: không đọc được thuộc tính block Handle={br.Handle}: {ex.Message}");
             }
             return d;
+        }
+
+        /// <summary>
+        /// Đọc tham số dynamic block MỘT lần (DynamicBlockReferencePropertyCollection tốn thời gian, trước đây đọc 2 lần
+        /// cho mỗi block): trả chủng loại (giống ReadVisibility) và thêm tham số đang hiện trừ Visibility vào attrs
+        /// (khoá "D:Tên") - Premium P5.
+        /// </summary>
+        private static string ReadDynamic(BlockReference br, string realName, ref Dictionary<string, string> attrs)
+        {
+            if (!br.IsDynamicBlock) return "";
+            object visValue = null;
+            bool visFound = false;
+            var allProps = new List<string>();
+            try
+            {
+                foreach (DynamicBlockReferenceProperty p in br.DynamicBlockReferencePropertyCollection)
+                {
+                    if (!p.Show) continue;
+                    string pName = p.PropertyName ?? "";
+                    object v = p.Value;
+                    if (pName.IndexOf("Visibility", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        // Tham số Visibility đầu tiên là chủng loại; tham số đứng sau không ghép vào chủng loại nữa
+                        if (!visFound) { visFound = true; visValue = v; }
+                        continue;
+                    }
+                    if (!visFound) allProps.Add($"{pName}={v}");
+
+                    if (pName.Length == 0) continue;
+                    string s;
+                    if (v is double dv) s = dv.ToString("0.###");
+                    else if (v is short || v is int || v is long || v is string) s = v.ToString();
+                    else continue; // Point3d, ObjectId... không hiện được thành cột
+                    attrs ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    attrs["D:" + pName] = s;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"BlockExtractor: không đọc được dynamic property cho '{realName}': {ex.Message}");
+                return "";
+            }
+            if (visFound && visValue != null) return visValue.ToString();
+            return allProps.Count > 0 ? string.Join(" - ", allProps) : "";
         }
 
         /// <summary>Khoá thuộc tính -> tên cột dễ đọc: "A:MA_TB" -> "MA_TB", "D:Distance1" -> "Tham số Distance1".</summary>
@@ -257,11 +316,8 @@ namespace LHBBlockScheduler.Core
             var mn = ext.Value.MinPoint;
             var mx = ext.Value.MaxPoint;
             double z = (mn.Z + mx.Z) / 2.0;
-            return new[]
-            {
-                new Point3d(mn.X, mn.Y, z), new Point3d(mx.X, mn.Y, z),
-                new Point3d(mx.X, mx.Y, z), new Point3d(mn.X, mx.Y, z)
-            }.Select(p => { var w = p.TransformBy(xform); return new Point2d(w.X, w.Y); }).ToArray();
+            Point2d Corner(double x, double y) { var w = new Point3d(x, y, z).TransformBy(xform); return new Point2d(w.X, w.Y); }
+            return new[] { Corner(mn.X, mn.Y), Corner(mx.X, mn.Y), Corner(mx.X, mx.Y), Corner(mn.X, mx.Y) };
         }
 
         /// <summary>
@@ -270,56 +326,34 @@ namespace LHBBlockScheduler.Core
         /// </summary>
         public static string ReadVisibility(BlockReference br, string realName)
         {
-            if (!br.IsDynamicBlock) return "";
-            try
-            {
-                DynamicBlockReferenceProperty primaryProp = null;
-                var allProps = new List<string>();
-
-                foreach (DynamicBlockReferenceProperty prop in br.DynamicBlockReferencePropertyCollection)
-                {
-                    if (!prop.Show) continue;
-                    string pName = prop.PropertyName;
-                    if (pName.IndexOf("Visibility", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        primaryProp = prop;
-                        break;
-                    }
-                    allProps.Add($"{pName}={prop.Value}");
-                }
-
-                if (primaryProp != null && primaryProp.Value != null) return primaryProp.Value.ToString();
-                if (allProps.Count > 0) return string.Join(" - ", allProps);
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"BlockExtractor: không đọc được dynamic property cho '{realName}': {ex.Message}");
-            }
-            return "";
+            // Cùng 1 hàm đọc với lúc quét -> lọc block mẫu và gom dòng luôn ra cùng chủng loại
+            Dictionary<string, string> ignored = null;
+            return ReadDynamic(br, realName, ref ignored);
         }
 
         private static void WalkBlockReference(Transaction tr, BlockReference br, Matrix3d parentXform,
-                                              int depth, int maxDepth, HashSet<ObjectId> visiting,
-                                              List<ObjectId> pathSoFar, List<ScannedRef> results,
-                                              Dictionary<ObjectId, Extents3d?> extCache)
+                                              int depth, int maxDepth, List<ObjectId> pathSoFar,
+                                              List<ScannedRef> results, ScanCache cache)
         {
             try
             {
                 ObjectId dynBtrId = br.DynamicBlockTableRecord;
                 var btrDef = (BlockTableRecord)tr.GetObject(dynBtrId, OpenMode.ForRead);
                 string realName = btrDef.Name;
+                bool isDynamic = br.IsDynamicBlock;
 
                 // Bỏ qua block ẩn danh hệ thống (*Model_Space, v.v.), nhưng GIỮ và đếm block A$C...
-                if (string.IsNullOrEmpty(realName) || (realName.StartsWith("*") && !br.IsDynamicBlock))
+                if (string.IsNullOrEmpty(realName) || (realName.StartsWith("*") && !isDynamic))
                     return;
 
                 // Xác định BlockKind
                 string kind;
-                if (br.IsDynamicBlock) kind = "Động";
+                if (isDynamic) kind = "Động";
                 else if (btrDef.HasAttributeDefinitions) kind = "Có thuộc tính";
                 else kind = "Tĩnh";
 
-                string visibility = ReadVisibility(br, realName);
+                var attributes = ReadAttributes(tr, br);
+                string visibility = ReadDynamic(br, realName, ref attributes);
 
                 Matrix3d currentXform = parentXform * br.BlockTransform;
                 var cs = currentXform.CoordinateSystem3d;
@@ -339,12 +373,12 @@ namespace LHBBlockScheduler.Core
                     Transform = currentXform,
                     OwnerTransform = parentXform,
                     Position = br.Position.TransformBy(parentXform),
-                    Corners = ComputeCorners(tr, br, currentXform, extCache),
+                    Corners = ComputeCorners(tr, br, currentXform, cache.Extents),
                     HasChildren = false,
                     ScaleX = cs.Xaxis.Length,
                     ScaleY = mirrored ? -cs.Yaxis.Length : cs.Yaxis.Length,
                     Rotation = Math.Atan2(cs.Xaxis.Y, cs.Xaxis.X),
-                    Attributes = ReadAttributes(tr, br)
+                    Attributes = attributes
                 };
                 results.Add(currentRef);
 
@@ -352,29 +386,17 @@ namespace LHBBlockScheduler.Core
                 if (depth + 1 < maxDepth)
                 {
                     ObjectId instanceBtrId = br.BlockTableRecord;
-                    if (!visiting.Contains(instanceBtrId))
+                    if (cache.Visiting.Add(instanceBtrId))
                     {
-                        visiting.Add(instanceBtrId);
-                        var childBtr = tr.GetObject(instanceBtrId, OpenMode.ForRead) as BlockTableRecord;
-                        if (childBtr != null && !childBtr.IsLayout)
+                        var children = ChildBlockRefs(tr, instanceBtrId, cache);
+                        foreach (ObjectId childId in children)
                         {
-                            bool foundChild = false;
-                            foreach (ObjectId childId in childBtr)
-                            {
-                                var childEnt = tr.GetObject(childId, OpenMode.ForRead) as Entity;
-                                if (childEnt is BlockReference childBr)
-                                {
-                                    foundChild = true;
-                                    var childPath = new List<ObjectId>(pathSoFar) { childBr.ObjectId };
-                                    WalkBlockReference(tr, childBr, currentXform, depth + 1, maxDepth, visiting, childPath, results, extCache);
-                                }
-                            }
-                            if (foundChild)
-                            {
-                                currentRef.HasChildren = true;
-                            }
+                            if (!(tr.GetObject(childId, OpenMode.ForRead) is BlockReference childBr)) continue;
+                            var childPath = new List<ObjectId>(pathSoFar) { childId };
+                            WalkBlockReference(tr, childBr, currentXform, depth + 1, maxDepth, childPath, results, cache);
                         }
-                        visiting.Remove(instanceBtrId);
+                        if (children.Count > 0) currentRef.HasChildren = true;
+                        cache.Visiting.Remove(instanceBtrId);
                     }
                 }
             }

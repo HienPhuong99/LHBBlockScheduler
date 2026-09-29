@@ -52,17 +52,11 @@ namespace LHBBlockScheduler.Models
 
         public bool IsTopLevel => Path != null && Path.Length == 1;
 
+        /// <summary>Nhóm trùng chứa block này (null = không trùng). DuplicateFinder.Detect gán lại mỗi lần tìm trùng.</summary>
+        public DuplicateGroup Group { get; set; }
+
         /// <summary>Block này là bản thừa của 1 nhóm trùng đang bị trừ khỏi SL (không đếm vào khu vực / cập nhật).</summary>
-        public bool IsExcludedDuplicate
-        {
-            get
-            {
-                if (Item == null || !Item.DuplicatesExcluded || Item.DuplicateGroups == null) return false;
-                foreach (var g in Item.DuplicateGroups)
-                    if (g.Instances.Contains(this) && g.Keep != this) return true;
-                return false;
-            }
-        }
+        public bool IsExcludedDuplicate => Item != null && Item.DuplicatesExcluded && Group != null && Group.Keep != this;
     }
 
     /// <summary>
