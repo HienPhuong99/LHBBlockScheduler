@@ -35,8 +35,15 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (29/09/2026): bản v9.1 Premium đã phát hành, CHƯA có kết quả test (v9 cũng chưa)
+## Trạng thái (29/09/2026): bản v9.2 Premium đã phát hành, CHƯA có kết quả test (v9, v9.1 cũng chưa)
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+v9.2 Premium (MD5 `A841B41AFBE6346399F2478603D31F4C`, `Dist\HUONG_DAN_TEST_20260929_v9.2_Premium.md`) = v9.1 + sửa ô
+Ký hiệu không đều (ảnh test v8: EXIT "CHỈ LỐI THOÁT NẠN" tỉ lệ ~2.4:1 phóng gần kín ô rộng ~2.3 x chiều cao dòng).
+Kết luận từ ảnh: lề ô "vuông" của v7 (`cell.Borders.X.Margin`) KHÔNG giới hạn AutoFit -> AutoFit co khung bao block vào
+cả ô. Sửa: `TableExporterAcad.EnsureSquareFrame` thêm 2 DBPoint (-0.5,-0.5) / (0.5,0.5) trên layer `LHB_KY_HIEU_KHUNG`
+(tắt, không in) vào mọi block LHB_SYM / LHB_IMG đã chuẩn hoá -> khung bao vuông 1x1. `ProbeExtents` đo lại
+GeometricExtents: không vuông (CAD bỏ qua layer tắt) thì chuyển điểm sang `LHB_KY_HIEU_KHUNG_HIEN` (bật, không in, màu 250).
+SetCellBlock bỏ lề không đều, chỉ còn lề đều 7.5% cạnh ngắn. Cần xác nhận: ký hiệu đều; log `[TableExporterAcad.SquareFrame]`.
 v9.1 Premium (MD5 `581F5A95D57EE036FED3F3DC01CF00DD`, `Dist\HUONG_DAN_TEST_20260929_v9.1_Premium.md`): tối ưu + bỏ phần thừa,
 user hỏi có cần thư viện GitHub không -> KHÔNG thêm NuGet/DLL ngoài vào add-in (chạy trong acad.exe, dễ xung đột DLL
 như System.Text.Json; JSON/Excel/Ribbon đã tự viết bằng thư viện .NET có sẵn). Thay đổi:

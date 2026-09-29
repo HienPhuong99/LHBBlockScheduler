@@ -21,7 +21,8 @@ namespace LHBBlockScheduler.Core
     ///  - Có VisibilityState (dynamic block)   -> LHB_SYM_xxx chứa bản chép các entity đang hiện trong BTR ẩn danh
     ///    của 1 instance (đúng chủng loại), theo toạ độ định nghĩa block = đúng hình trên cột Ký hiệu của form.
     ///  - Không có VisibilityState              -> LHB_SYM_xxx chứa 1 BlockReference tới definition.
-    /// Mọi block ký hiệu được chuẩn hoá (tâm hình tại base point, cạnh dài nhất = 1) rồi đặt vào ô ở chế độ
+    /// Mọi block ký hiệu được chuẩn hoá (tâm hình tại base point, cạnh dài nhất = 1, khung bao vuông 1 x 1 bằng
+    /// 2 điểm trên layer tắt LHB_KY_HIEU_KHUNG -> mọi ký hiệu đều cỡ, v9.2) rồi đặt vào ô ở chế độ
     /// AutoFit để ký hiệu co giãn theo ô khi user kéo đổi kích thước dòng/cột (yêu cầu 28/09/2026).
     /// AutoFit đo bằng GeometricExtents của AutoCAD -> block ném eInvalidExtents (ĐÈN EXIT) được phẳng hoá
     /// thành entity rời trước, nếu không AutoFit làm ký hiệu to nhỏ, lệch ô (test 28/09/2026).
@@ -511,34 +512,18 @@ namespace LHBBlockScheduler.Core
 
         /// <summary>
         /// Đặt block vào ô ở chế độ AutoFit: ký hiệu tự co giãn theo ô khi user kéo đổi kích thước dòng/cột.
-        /// AutoFit luôn lấp đầy phần trong lề -> lề ô được đặt sao cho phần trong lề là HÌNH VUÔNG cạnh = chiều cao
-        /// dòng trừ lề. Ký hiệu đã chuẩn hoá cạnh dài = 1 nên mọi ký hiệu có cạnh dài bằng nhau, đều cỡ nhau.
-        /// Trước đây phần trong lề = cả ô: cột Ký hiệu rộng làm ký hiệu dẹt (tủ chữa cháy, EXIT, điện trở cuối
-        /// nguồn) phóng to theo chiều ngang, to hơn hẳn ký hiệu vuông (test 29/09/2026).
-        /// Căn trái/phải: dồn phần lề thừa sang phía đối diện. Trả về cạnh ô vuông.
+        /// AutoFit co KHUNG BAO của block vào ô. Block ký hiệu có khung bao vuông 1 x 1 (AddSquareFrame) -> khung vuông
+        /// co theo cạnh ngắn của ô, mọi ký hiệu có cạnh dài bằng nhau dù cột Ký hiệu rộng hay hẹp.
+        /// v7-v9 dùng lề ô để tạo phần trong lề hình vuông, nhưng AutoFit không theo lề đó: ký hiệu dẹt (EXIT chỉ lối,
+        /// tỉ lệ ~2.4:1) phóng theo bề ngang ô rộng, to hơn hẳn các dòng khác (ảnh test v8 29/09/2026).
+        /// Căn trái/phải: khung vuông dồn sang trái/phải theo căn lề ô. Trả về cạnh khung vuông dự kiến.
         /// </summary>
         private static double SetCellBlock(Table tb, int r, int c, SymbolInfo sym, CellAlignment align, double cellWidth, double rowHeight)
         {
             var cell = tb.Cells[r, c];
             cell.Alignment = align;
             double pad = Math.Min(cellWidth, rowHeight) * SymbolPaddingRatio;
-            double side = Math.Max(Math.Min(cellWidth, rowHeight) - 2 * pad, 1e-6);
-            double spare = Math.Max(cellWidth - side - 2 * pad, 0);
-            double left = pad + (align == CellAlignment.MiddleLeft ? 0 : align == CellAlignment.MiddleRight ? spare : spare / 2);
-            double right = pad + spare - (left - pad);
-            double vert = Math.Max((rowHeight - side) / 2, 0);
-            try
-            {
-                cell.Borders.Left.Margin = left;
-                cell.Borders.Right.Margin = right;
-                cell.Borders.Top.Margin = vert;
-                cell.Borders.Bottom.Margin = vert;
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"[TableExporterAcad.SetCellBlock] Không đặt được lề ô vuông [{r},{c}] (trái={left:0.#}, phải={right:0.#}, dọc={vert:0.#}): {ex.Message} -> dùng lề đều");
-                SetCellMargins(cell, pad, pad);
-            }
+            SetCellMargins(cell, pad, pad);
 
             try
             {
@@ -555,7 +540,91 @@ namespace LHBBlockScheduler.Core
                 tb.SetBlockTableRecordId(r, c, sym.BtrId, true);
 #pragma warning restore 618
             }
-            return side;
+            return Math.Max(Math.Min(cellWidth, rowHeight) - 2 * pad, 0);
+        }
+
+        /// <summary>Layer tắt, không in: chứa 2 điểm định khung vuông của block ký hiệu (không thấy trên màn hình, không in).</summary>
+        public const string FrameLayerName = "LHB_KY_HIEU_KHUNG";
+
+        /// <summary>
+        /// Thêm khung bao vuông 1 x 1 (tâm tại gốc) cho block ký hiệu đã chuẩn hoá: 2 điểm (DBPoint) ở 2 góc chéo
+        /// (-0.5,-0.5) và (0.5,0.5) trên layer LHB_KY_HIEU_KHUNG tắt + không in. Hình đã chuẩn hoá (cạnh dài = 1, tâm
+        /// tại gốc) nằm gọn trong khung. GeometricExtents (AutoFit dùng) tính cả đối tượng trên layer tắt -> mọi block
+        /// ký hiệu có khung bao như nhau. Block đã có khung thì bỏ qua (block ảnh tuỳ chỉnh dùng lại giữa các lần xuất).
+        /// </summary>
+        private static void EnsureSquareFrame(Database db, Transaction tr, ObjectId symBtrId, string symName)
+        {
+            ObjectId layerId = GetFrameLayer(db, tr);
+            var btr = (BlockTableRecord)tr.GetObject(symBtrId, OpenMode.ForRead);
+            var pointClass = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBPoint));
+            foreach (ObjectId id in btr)
+            {
+                if (id.ObjectClass.IsDerivedFrom(pointClass) &&
+                    ((Entity)tr.GetObject(id, OpenMode.ForRead)).Layer.StartsWith(FrameLayerName, StringComparison.OrdinalIgnoreCase)) return;
+            }
+
+            btr.UpgradeOpen();
+            var points = new List<DBPoint>();
+            foreach (var p in new[] { new Point3d(-0.5, -0.5, 0), new Point3d(0.5, 0.5, 0) })
+            {
+                var pt = new DBPoint(p);
+                pt.SetDatabaseDefaults(db);
+                pt.LayerId = layerId;
+                btr.AppendEntity(pt);
+                tr.AddNewlyCreatedDBObject(pt, true);
+                points.Add(pt);
+            }
+
+            // Kiểm tra khung bao block (GeometricExtents = cái AutoFit dùng). Nếu bản CAD này bỏ qua đối tượng trên layer
+            // tắt -> khung không vuông -> chuyển 2 điểm sang layer bật (không in, màu xám tối, chỉ là 2 chấm nhỏ trên màn hình)
+            string check = ProbeExtents(symBtrId, out bool square);
+            if (!square)
+            {
+                ObjectId visibleLayer = DrawingHelper.GetOrCreateLayer(db, tr, FrameLayerName + "_HIEN", 250, false);
+                foreach (var pt in points) pt.LayerId = visibleLayer;
+                string recheck = ProbeExtents(symBtrId, out square);
+                Logger.Warn($"[TableExporterAcad.SquareFrame] '{symName}': khung bao với điểm trên layer tắt = {check} (không vuông) -> " +
+                            $"chuyển điểm sang layer {FrameLayerName}_HIEN (bật, không in): khung bao = {recheck}");
+                return;
+            }
+            Logger.Log($"[TableExporterAcad.SquareFrame] '{symName}': thêm khung vuông 1x1 (2 điểm, layer {FrameLayerName} tắt / không in), " +
+                       $"khung bao block = {check}");
+        }
+
+        /// <summary>Khung bao của block ký hiệu đặt tại gốc, tỉ lệ 1 (giống AutoFit đo). square = khung 1 x 1.</summary>
+        private static string ProbeExtents(ObjectId btrId, out bool square)
+        {
+            square = false;
+            try
+            {
+                using (var probe = new BlockReference(Point3d.Origin, btrId))
+                {
+                    if (!ExtentsHelper.TryGetOwnExtents(probe, out var e)) return "KHÔNG tính được";
+                    double w = e.MaxPoint.X - e.MinPoint.X, h = e.MaxPoint.Y - e.MinPoint.Y;
+                    square = Math.Abs(w - 1) < 1e-3 && Math.Abs(h - 1) < 1e-3;
+                    return $"{w:0.###}x{h:0.###}";
+                }
+            }
+            catch (Exception ex)
+            {
+                // Không đo được thì giữ layer tắt (không làm hỏng bảng)
+                square = true;
+                return "lỗi đo: " + ex.Message;
+            }
+        }
+
+        private static ObjectId GetFrameLayer(Database db, Transaction tr)
+        {
+            ObjectId id = DrawingHelper.GetOrCreateLayer(db, tr, FrameLayerName, 8, false);
+            var ltr = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+            if (!ltr.IsOff || ltr.IsPlottable)
+            {
+                ltr.UpgradeOpen();
+                ltr.IsOff = true;
+                ltr.IsPlottable = false;
+                Logger.Log($"[TableExporterAcad] Layer '{FrameLayerName}': tắt + không in");
+            }
+            return id;
         }
 
         /// <summary>
@@ -635,6 +704,7 @@ namespace LHBBlockScheduler.Core
 
             LogLinetypes(tr, entities, symName, "trước chuẩn hoá");
             NormalizeEntities(entities, symName, out sym.Width, out sym.Height);
+            if (sym.IsNormalized) EnsureSquareFrame(db, tr, symBtrId, symName);
             sym.BtrId = symBtrId;
             if (cache != null) cache[symName] = sym;
             return sym;
@@ -1003,6 +1073,8 @@ namespace LHBBlockScheduler.Core
                     sym.Width = e.MaxPoint.X - e.MinPoint.X;
                     sym.Height = e.MaxPoint.Y - e.MinPoint.Y;
                 }
+                // Block ảnh tạo từ bản trước v9.2 chưa có khung vuông -> thêm
+                if (sym.IsNormalized) EnsureSquareFrame(db, tr, sym.BtrId, name);
                 return sym;
             }
 
@@ -1037,6 +1109,7 @@ namespace LHBBlockScheduler.Core
             sym.Width = w;
             sym.Height = h;
             Logger.Log($"[TableExporterAcad.ImageBlock] Tạo '{name}' từ ảnh '{imagePath}' ({px}x{py} px -> {w:0.###}x{h:0.###})");
+            EnsureSquareFrame(db, tr, sym.BtrId, name);
             return sym;
         }
 
