@@ -26,7 +26,8 @@
 ## Quy trình phát hành bản test
 1. `dotnet build -c Release`, sửa hết lỗi compile.
 2. `powershell -ExecutionPolicy Bypass -File build.ps1` -> `Dist\LHBBlockScheduler\` (MD5 trong build-info.txt).
-3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium",
+3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium" (từ v9.4 chỉ sửa
+   `MyApp.Version` trong Properties/AssemblyInfo.cs),
    `Dist\LHBBlockScheduler_<yyyyMMdd>_vN_Premium.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN_Premium.md` (vN có thể là v9.1).
    Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md.
    (v8 trở về trước: `Dist\LHBBlockScheduler_<yyyyMMdd>_vN.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN.md`)
@@ -35,13 +36,53 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (29/09/2026): bản v9.3 Premium đã phát hành, CHƯA có kết quả test (v9, v9.1, v9.2 cũng chưa)
+## Trạng thái (29/09/2026): bản v9.4 Premium "ổn định" đã phát hành, CHƯA có kết quả test (v9 – v9.3 cũng chưa)
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
-Review + kế hoạch thương mại hoá (29/09/2026, không sửa mã): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md`. Bản kế tiếp nên là
-v9.4 "ổn định": sửa nhóm P0/P1 mục 3 (ARRAY/MINSERT/XREF không đếm đúng, ảnh ký hiệu cache theo tên block, form modeless khi
-đóng/đổi bản vẽ, LastSelectedObjectIds static, bảng chỉ vào Model Space, ảnh tuỳ chỉnh trỏ %APPDATA%, ghi settings không an
-toàn, Process.Start trên .NET 8). Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0
-(ExcludeAssets=runtime, không cần libs\): 0 lỗi -> dùng được cho CI. AutoCAD 2025/2026 đã lên .NET 10 qua bản cập nhật 08-09/2026.
+Review + kế hoạch thương mại hoá (29/09/2026): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md` (mã lỗi A1..F6 dùng trong commit/test).
+Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0 (ExcludeAssets=runtime, không cần
+libs\): 0 lỗi -> dùng được cho CI. AutoCAD 2025/2026 đã lên .NET 10 qua bản cập nhật 08-09/2026.
+Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/AcCoreMgd từ gói NuGet AutoCAD.NET 24.0.0
+(`autocad.net`, `autocad.net.core`, `autocad.net.model`) vào 1 thư mục, `dotnet build -c Release -p:AutoCADInstallDir=<thư mục>/
+-p:TargetFrameworkRootPath=<nuget>/microsoft.netframework.referenceassemblies.net48/1.0.3/build/
+-p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
+PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
+tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
+v9.4 Premium (MD5 `DA84C6DB97E8BFAFD4437EE1A1302C6C`, `Dist\HUONG_DAN_TEST_20260929_v9.4_Premium.md`) = v9.3 + sửa P0/P1 của
+review (user 29/09: "Sửa trước những lỗi đã phát hiện và tồn đọng"):
+- A1-A5 `BlockExtractor` viết lại phần duyệt: `Classify` -> Table (bỏ), Xref (bỏ, hoặc vỏ trong suốt khi
+  `ExtractionOptions.CountXrefBlocks` / settings `CountXrefBlocks` / ô "Đếm trong XREF"), Container (block ẩn danh *U không
+  dynamic = ARRAY liên kết `AssocArray.IsAssociativeArray` hoặc *U khác: vỏ trong suốt, không tăng độ sâu), Block. MINSERT:
+  `ElementOffsets` (cột X / hàng Y xoay theo Rotation, `PlaneToWorld(Normal)`), mỗi phần tử 1 ScannedRef, `IsMInsertElement`
+  -> `BlockInstanceRef.IsTopLevel` = false (không xoá / thay / ghi thuộc tính riêng). Bỏ block con `!Visible`. `RefVia`
+  (Array/MInsert/Xref/Anonymous) -> cột Nguồn. `ScanStats` (log + thanh trạng thái form + dòng lệnh); cảnh báo độ sâu chỉ khi
+  block con bị cắt cùng tên với block đang đếm (`MissedByDepth`). Chế độ block mẫu (`ExtractionOptions.TemplateFilter`, "Chỉ
+  quét block mẫu"): đi sâu không giới hạn, chỉ ghi nhận block mẫu, block mẫu không bị loại vì có block con, chỉ đi vào block
+  mẫu khi CountParentBlocks. `TemplateSelectionFilter(db, lib, countXrefs)` cùng quy tắc. `TemplateLibraryManager.Match` thử
+  lại bỏ tiền tố `XREF|` (`StripXrefPrefix`). Chọn đối tượng lọc DXF INSERT. `ExtractionOptions.FromSettings`: LHBSCAN, lệnh
+  Premium, nhiều bản vẽ dùng tuỳ chọn form đã lưu (form lưu ScanDepth / CountParentBlocks / SplitBy* / CountXrefBlocks).
+- B1 `UI/DocumentBinding.cs`: form + hộp thoại modeless ẩn khi đổi bản vẽ, hiện lại khi quay về, tự đóng ở
+  DocumentToBeDestroyed (static `_closingDocs` để form con đóng theo form cha không hỏi); TemplateLibraryDialog tự lưu
+  (`SaveOnDocumentClose`). Form: `EnsureDocActive()` trước thao tác bản vẽ. B2: bỏ `LastSelectedObjectIds`, form giữ
+  `_selectedIds`; `ExtractFromSelection(doc, options, out selectedIds)`, `ExtractAdditionalSelection(doc, options, known, out
+  added, out already)`. B3 `Core/FileHelper.cs` (WriteAllTextAtomic: file tạm + File.Replace giữ .bak; ReadWithBackup).
+- A6 `TableUpdater`: `CheckStructure` (TableRowCount/TableColumnCount, bảng cũ tính từ FirstDataRow + Rows + dòng tổng) -> bảng
+  bị thêm / xoá dòng, cột bằng tay thì không cập nhật; `HandseedAtScan` (hex) -> chỉ thêm block mới (handle >= Handseed) trong
+  khung, `RootsTruncated` (> 20000 gốc) thì như cũ; `TableRowKeys.Label` chỉ để log dòng sửa tay; tìm bảng mọi Layout.
+- C1 `ThumbnailGenerator`: file `<tên>[_<chủng loại>]__<chữ ký SHA-256 12 hex nội dung BTR>.png` (`ComputeBtrSignature`: loại,
+  layer, màu, ẩn/hiện, Bounds, chữ; không dùng tên BTR *U), dọn ảnh > 90 ngày. C2 `TableExporter.LocalizeImage / SetImageSource
+  / RelinkImagesToDrawing`: chép ảnh vào `<DWG>_LHBImages`, SourceFileName tương đối + ActiveFileName tuyệt đối, bản vẽ chưa lưu
+  (`SavedDrawingPath`: IsNamedDrawing, không .dwt) nhắc 1 lần; block của XREF dùng ảnh ký hiệu thay vì tham chiếu định nghĩa
+  phụ thuộc XREF. C3: bảng vào `db.CurrentSpaceId`, đường dẫn block trùng chỉ vẽ khi bảng ở Model,
+  `UiKit.ScaleForCurrentSpace` hỏi tỉ lệ 1 khi ở Layout.
+- D3 ExcelExporter.Open UseShellExecute. D5 `Core/HashHelper.cs` (MD5 hệ thống, bị FIPS chặn thì tự tính MD5 RFC 1321 - đã
+  kiểm khớp 300 mẫu; ShortHash giữ đúng tên LHB_SYM_ cũ). E5: `MyApp.Version` = 1 nguồn (AssemblyVersion/FileVersion/
+  InformationalVersion "v9.4 Premium", tiêu đề form, dòng lệnh, LHBDIAG); build.ps1 ghi ProductVersion vào `@@LHB_VERSION@@`
+  của LHB.lsp. E1: PackageContents ghi rõ bundle máy dev, SeriesMax R24.3; HUONG_DAN_SU_DUNG phần cài đặt viết lại (kéo thả
+  LHB.lsp / Startup Suite, AutoCAD 2021-2024). BlockReplacer HashSet. ScheduleManager: `ZoomAndHighlightItem` theo Corners WCS,
+  highlight theo đường dẫn từng block, bỏ ObjectId bản vẽ khác.
+Cần xác nhận khi có kết quả test v9.4: ARRAY/MINSERT/XREF đếm đúng (log `BlockExtractor: quét [...]`); form ẩn/hiện/đóng theo
+bản vẽ không lỗi; ảnh tương đối `.\<DWG>_LHBImages\` nạp được (log `[TableExporter] Ảnh ...`); bảng trên Layout +
+LHBCAPNHAT; `AssocArray.IsAssociativeArray` chạy (không thì ARRAY vẫn đếm nhưng ghi "ẩn danh").
 v9.3 Premium (MD5 `D3E5A61DB704B975DB5D97ADD35CABC6`, `Dist\HUONG_DAN_TEST_20260929_v9.3_Premium.md`) = v9.2 + CHƯA BẮT
 BẢN QUYỀN (user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"): `LicenseManager.Enforced = false`
 -> IsLicensed luôn true, TrialDaysLeft không đụng registry, StatusText "Premium miễn phí...". Không làm key chung (mã gắn

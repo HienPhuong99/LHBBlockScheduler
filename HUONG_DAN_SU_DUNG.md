@@ -6,111 +6,43 @@
 
 ## 📋 Yêu cầu
 
-- ✅ AutoCAD 2021 trở lên (bản 64-bit)
+- ✅ AutoCAD **2021 – 2024** bản đầy đủ 64-bit (AutoCAD LT không chạy được add-in .NET)
 - ✅ Windows 10/11
+- ⚠️ AutoCAD **2025 trở lên** chạy .NET 8/10: bản hiện tại (build .NET Framework 4.8) **chưa chạy được**, sẽ có bản riêng.
 
 ---
 
-## 🚀 Cách 1: Cài đặt tự động (Khuyến nghị — chỉ cần làm 1 lần)
+## 🚀 Cách 1: Kéo thả `LHB.lsp` (khuyến nghị)
 
-Cách này giúp plugin **tự nạp mỗi khi mở AutoCAD**, không cần thao tác gì thêm.
+1. Giải nén file zip (vd `LHBBlockScheduler_..._Premium.zip`) vào 1 thư mục cố định, ví dụ `D:\LHBBlockScheduler\`.
+   Không chạy thẳng trong file zip.
+2. Mở AutoCAD, mở 1 bản vẽ bất kỳ.
+3. **Kéo thả** file `LHB.lsp` (trong thư mục vừa giải nén) vào vùng vẽ.
+   - LISP tự tìm và nạp đúng `LHBBlockScheduler.dll` đi kèm (kiểm tra MD5 trong `build-info.txt`, không nạp nhầm bản cũ).
+   - Có hộp thoại bảo mật → chọn **Load** / **Always Load**.
+4. Dòng lệnh hiện `[LHB] v9.x Premium ...` là xong. Gõ `LHBSCAN` để thống kê, `LHBHELP` xem danh sách lệnh.
 
-### Bước 1: Đóng AutoCAD hoàn toàn
+### Tự nạp mỗi lần mở AutoCAD
 
-Nếu AutoCAD đang mở, hãy **đóng hoàn toàn** (không chỉ đóng bản vẽ, mà đóng cả chương trình).
+1. Gõ `APPLOAD` → Enter.
+2. Mục **Startup Suite** → **Contents...** → **Add...** → chọn `LHB.lsp` trong thư mục add-in → **Close**.
+3. (Tuỳ chọn, tránh hỏi bảo mật) `OPTIONS` → tab **Files** → **Trusted Locations** → **Add** thư mục add-in.
 
-### Bước 2: Copy thư mục plugin
-
-1. Mở **File Explorer** (phím tắt: `Win + E`)
-
-2. Vào thư mục sau (copy dán vào thanh địa chỉ):
-   ```
-   C:\Users\vsp\Downloads\LHBBlockScheduler\Bundle\
-   ```
-
-3. Bạn sẽ thấy thư mục:
-   ```
-   📁 LHBBlockScheduler.bundle
-   ```
-
-4. **Copy** thư mục `LHBBlockScheduler.bundle` (Chuột phải → Copy, hoặc `Ctrl+C`)
-
-5. Mở thư mục đích bằng cách **copy dán đường dẫn sau** vào thanh địa chỉ File Explorer:
-   ```
-   %APPDATA%\Autodesk\ApplicationPlugins
-   ```
-   > 💡 Nếu thư mục `ApplicationPlugins` chưa tồn tại, hãy tạo mới:
-   > - Vào `%APPDATA%\Autodesk\`
-   > - Chuột phải → New → Folder → đặt tên `ApplicationPlugins`
-
-6. **Dán** thư mục vào đây (Chuột phải → Paste, hoặc `Ctrl+V`)
-
-7. Kết quả cuối cùng phải có cấu trúc như sau:
-   ```
-   📁 %APPDATA%\Autodesk\ApplicationPlugins\
-       📁 LHBBlockScheduler.bundle\
-           📄 PackageContents.xml
-           📁 Contents\
-               📄 LHBBlockScheduler.dll
-   ```
-
-### Bước 3: Kiểm tra thư mục Contents có file DLL chưa
-
-Mở thư mục `Contents` bên trong `LHBBlockScheduler.bundle`:
-- Nếu **đã có** file `LHBBlockScheduler.dll` → bỏ qua, sang Bước 4
-- Nếu **chưa có** → copy file từ đường dẫn sau:
-  ```
-  C:\Users\vsp\Downloads\LHBBlockScheduler\bin\Debug\net48\LHBBlockScheduler.dll
-  ```
-  Dán vào thư mục `Contents`.
-
-### Bước 4: Mở AutoCAD
-
-Mở AutoCAD bình thường. Plugin sẽ **tự động nạp**. Bạn sẽ thấy dòng thông báo ở command line:
-```
-=== LHBBlockScheduler đã nạp ===
-```
-
-✅ **Xong!** Plugin đã sẵn sàng sử dụng.
+> 💡 Cập nhật bản mới: giải nén bản mới ra **thư mục mới**, **tắt hẳn AutoCAD**, mở lại rồi kéo thả `LHB.lsp` của bản mới
+> (hoặc sửa đường dẫn trong Startup Suite). AutoCAD không gỡ được DLL đã nạp trong phiên đang chạy.
 
 ---
 
-## 🔧 Cách 2: Nạp thủ công bằng NETLOAD (mỗi lần mở AutoCAD)
+## 🔧 Cách 2: Nạp thủ công bằng NETLOAD
 
-Dùng cách này nếu bạn chỉ muốn **thử nghiệm** hoặc không muốn cài cố định.
+1. Gõ `NETLOAD` → Enter.
+2. Chọn file `LHBBlockScheduler.dll` trong thư mục đã giải nén → **Open**.
+3. Có hộp thoại bảo mật → **Load** / **Always Load**.
 
-### Bước 1: Mở AutoCAD
+Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suite).
 
-Mở AutoCAD và mở bất kỳ bản vẽ nào.
-
-### Bước 2: Gõ lệnh NETLOAD
-
-1. Click vào **command line** ở dưới cùng màn hình AutoCAD
-2. Gõ:
-   ```
-   NETLOAD
-   ```
-3. Nhấn **Enter**
-
-### Bước 3: Chọn file DLL
-
-Cửa sổ chọn file sẽ hiện ra. Tìm đến:
-```
-C:\Users\vsp\Downloads\LHBBlockScheduler\bin\Debug\net48\LHBBlockScheduler.dll
-```
-
-Click **Open**.
-
-### Bước 4: Xác nhận
-
-Nếu có hộp thoại hỏi về bảo mật, chọn **Load** hoặc **Always Load**.
-
-Bạn sẽ thấy dòng thông báo:
-```
-=== LHBBlockScheduler đã nạp ===
-```
-
-✅ **Xong!** Nhưng lần sau mở AutoCAD phải NETLOAD lại.
+> ℹ️ Thư mục `Bundle\LHBBlockScheduler.bundle` trong mã nguồn là bundle cho **máy build** (nạp `LHBLoader.dll` đọc
+> `%APPDATA%\LHBBlockScheduler\Runtime`), không dùng để cài cho người dùng.
 
 ---
 
@@ -142,6 +74,20 @@ Bạn sẽ thấy dòng thông báo:
 | 🔁 **Block trùng vị trí** | Cột **Trùng** báo số block cùng tên bị copy đè / che lấp nhau. Ô **Không đếm trùng** (bật sẵn) trừ phần thừa khỏi SL. Nút **Tìm trùng** mở danh sách chỗ trùng: zoom tới, khoanh đỏ, xoá bản thừa, đổi sai số vị trí và mức che lấp (%) |
 | ➕ **Quét thêm** | Nút **Quét thêm** (hàng 1): chọn thêm vùng, SL cộng dồn vào bảng đang có, giữ tên / đơn vị đã sửa. Vùng đã chọn trước không đếm lại |
 | 📚 **Block mẫu** | Chọn **Bộ block mẫu**, nút **Block mẫu...** mở thư viện. Ô **Chỉ quét block mẫu** bật: lúc quét chỉ dính block mẫu, block khác không được chọn; dòng được đặt tên, đơn vị, thứ tự theo thư viện. Cột **TT** chấm xanh = có trong bộ block mẫu |
+
+### Block trong ARRAY / MINSERT / XREF, độ sâu quét (từ v9.4)
+
+- **ARRAY** (lệnh ARRAY, kiểu liên kết): từng block trong mảng được đếm. **MINSERT** (chèn nhiều hàng × cột): đếm đủ
+  hàng × cột. Cột **Nguồn** ghi `+ ARRAY` / `+ MINSERT` / `+ XREF`, rê chuột xem số block mỗi loại.
+- **XREF** (bản vẽ tham chiếu ngoài): mặc định **bỏ qua** (không đếm cửa, nội thất... của bản vẽ kiến trúc). Muốn đếm block
+  trong XREF: tích **Đếm trong XREF** (hàng 2). Block mẫu vẫn khớp tên với block trong XREF (tên dạng `XREF|TÊN`).
+- Block con bị **ẩn theo trạng thái visibility** của dynamic block cha không còn bị đếm.
+- **Độ sâu quét** (1 / 2 / 3 / Không giới hạn) và các ô tuỳ chọn được **nhớ lại** cho lần quét sau. Thanh trạng thái dưới
+  cùng form ghi số liệu lần quét; chữ **đỏ ⚠** = có thiết bị nằm sâu hơn độ sâu quét chưa được đếm → tăng độ sâu.
+- Ô **Chỉ quét block mẫu** bật: tìm block mẫu ở **mọi tầng** (không theo độ sâu); block mẫu có block con bên trong vẫn được
+  đếm là 1 thiết bị.
+- Chuyển sang bản vẽ khác: cửa sổ thống kê **tự ẩn**, quay lại bản vẽ đó thì hiện lại; đóng bản vẽ thì cửa sổ tự đóng.
+- **Xuất bảng** chèn vào không gian đang làm việc: đang ở **Layout** thì bảng nằm trên Layout (hỏi dùng tỉ lệ 1 cho giấy).
 
 > Từ v9.1 chỉ còn **thư viện block mẫu** (bỏ thư viện thiết bị cũ: nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV). Thư viện cũ đã có dữ liệu được tự chuyển 1 lần thành bộ mẫu tên `TV cu <tên>` (vd `TV cu default`), chọn ở ô **Bộ block mẫu** nếu muốn dùng.
 
@@ -182,7 +128,8 @@ Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút và
 3. **▲ ▼** đổi thứ tự cột, **Lưu & áp dụng**. Form thống kê có thêm cột SL mỗi khu (đứng trước cột SL), bảng xuất và Excel cũng có.
 
 ### Bảng tự cập nhật (`LHBCAPNHAT`)
-Xuất bảng kiểu **AutoCAD Table**. Sửa bản vẽ xong gõ `LHBCAPNHAT`, chọn bảng hoặc Enter (mọi bảng LHB). Ô thay đổi chữ đỏ, loại block mới thêm dòng cuối, dòng tổng tính lại.
+Xuất bảng kiểu **AutoCAD Table**. Sửa bản vẽ xong gõ `LHBCAPNHAT`, chọn bảng hoặc Enter (mọi bảng LHB, cả trên Layout). Ô thay đổi chữ đỏ, loại block mới thêm dòng cuối, dòng tổng tính lại.
+Từ v9.4: chỉ thêm block **mới đặt sau lúc xuất bảng** trong khung vùng quét (không kéo block cũ nằm ngoài vùng chọn ban đầu); bảng bị **thêm / xoá dòng, cột bằng tay** thì không cập nhật (tránh ghi nhầm dòng) — xuất lại bảng mới. Sửa chữ tên / đơn vị trong bảng vẫn được giữ.
 
 ### Xuất Excel
 Nút **Xuất Excel** (cạnh Xuất bảng): file `.xlsx` đúng các cột đang hiện, có ảnh ký hiệu, tiêu đề / dòng tổng theo mẫu bảng.
@@ -227,8 +174,8 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 
 ### Plugin không tự nạp khi mở AutoCAD
 
-- Kiểm tra thư mục `%APPDATA%\Autodesk\ApplicationPlugins\LHBBlockScheduler.bundle\` có đúng cấu trúc không
-- Kiểm tra file `LHBBlockScheduler.dll` có nằm trong thư mục `Contents\` không
+- Kiểm tra `APPLOAD` → **Startup Suite** có `LHB.lsp` và đường dẫn còn đúng (thư mục add-in không bị xoá / đổi tên)
+- Kéo thả lại `LHB.lsp`; dòng lệnh báo "đang chạy bản cũ" → tắt hẳn AutoCAD rồi mở lại
 - Thử dùng **Cách 2 (NETLOAD)** để test
 
 ### NETLOAD báo lỗi bảo mật
@@ -251,15 +198,13 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 
 ## 🔄 Cập nhật plugin khi có phiên bản mới
 
-1. **Đóng AutoCAD hoàn toàn**
-2. Copy file `LHBBlockScheduler.dll` mới (từ thư mục `bin\Debug\net48\`)
-3. Dán đè vào:
-   ```
-   %APPDATA%\Autodesk\ApplicationPlugins\LHBBlockScheduler.bundle\Contents\
-   ```
-4. Mở lại AutoCAD
+1. **Đóng AutoCAD hoàn toàn**.
+2. Giải nén bản mới ra **thư mục mới** (giữ thư mục cũ tới khi bản mới chạy tốt). Thư viện block mẫu (`ThuVienMau`) tự
+   chép sang thư mục mới từ bản dự phòng trong `%APPDATA%\LHBBlockScheduler\ThuVienMau`.
+3. Mở AutoCAD, kéo thả `LHB.lsp` của bản mới (Startup Suite: bỏ `LHB.lsp` cũ, thêm `LHB.lsp` mới).
+4. Gõ `LHBVERSION` kiểm tra MD5 đúng với file hướng dẫn test của bản đó.
 
-> ⚠️ **Quan trọng:** Phải đóng AutoCAD trước khi copy đè file DLL, vì AutoCAD đang giữ file khi chạy.
+> ⚠️ **Quan trọng:** AutoCAD giữ DLL đã nạp tới khi tắt hẳn chương trình — không chép đè DLL khi AutoCAD đang mở.
 
 ---
 

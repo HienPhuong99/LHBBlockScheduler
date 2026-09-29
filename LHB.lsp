@@ -21,13 +21,16 @@
 ;; MD5 của DLL đi kèm. Còn nguyên chữ mẫu (chạy thẳng từ thư mục build) = không kiểm tra MD5.
 (setq *LHB_EXPECTED_MD5* "@@LHB_BUILD_MD5@@")
 
+;; Phiên bản add-in đi kèm (build.ps1 ghi từ DLL, v9.4). Còn chữ mẫu = chạy thẳng từ thư mục build.
+(setq *LHB_VERSION* "@@LHB_VERSION@@")
+
 (defun c:LHBHELP ()
   (princ "\n==================================================================")
   (princ "\n  LHBBlockScheduler - DANH SÁCH LỆNH KHẢ DỤNG:")
   (princ "\n  - LHBSCAN       : Mở giao diện Thống kê Block đầy đủ tính năng")
   (princ "\n  - LHBMAU        : Thư viện block mẫu (thêm / xoá / sắp xếp / chèn block mẫu)")
   (princ "\n  - LHBLENH       : Bảng danh sách lệnh, chạy lệnh, đổi phím tắt (mặc định gõ LHB)")
-  (princ "\n  ---- PREMIUM (v9.3) ----")
+  (princ (strcat "\n  ---- PREMIUM" (if (vl-string-search "LHB_VERSION" *LHB_VERSION*) "" (strcat " (" *LHB_VERSION* ")")) " ----"))
   (princ "\n  - LHBKHUVUC     : Tầng / khu vực -> bảng có cột SL từng khu")
   (princ "\n  - LHBCAPNHAT    : Cập nhật bảng đã xuất sau khi sửa bản vẽ")
   (princ "\n  - LHBNHIEUBV    : Thống kê nhiều bản vẽ DWG cùng lúc")

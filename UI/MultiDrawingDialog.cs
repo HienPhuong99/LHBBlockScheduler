@@ -30,6 +30,8 @@ namespace LHBBlockScheduler.UI
         public MultiDrawingDialog(Document doc)
         {
             _doc = doc;
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+            DocumentBinding.Bind(this, doc);
             UiKit.InitForm(this, "Thống kê nhiều bản vẽ - LHB Premium", 1000, 600);
 
             var left = new Panel { Dock = DockStyle.Left, Width = 300, Padding = new Padding(6) };
@@ -87,13 +89,13 @@ namespace LHBBlockScheduler.UI
             try
             {
                 var s = SettingsManager.Current;
-                var options = new ExtractionOptions
-                {
-                    MaxDepth = s.ScanDepth > 0 ? s.ScanDepth : 2,
-                    SplitByVisibility = _chkSplitVis.Checked,
-                    SplitAttributeKeys = new List<string>()
-                };
                 var tpl = TemplateLibraryManager.Load(s.CurrentTemplateSet);
+                // v9.4: cùng tuỳ chọn quét với form (độ sâu, block cha, XREF); chỉ block mẫu -> tìm block mẫu ở mọi tầng
+                var options = ExtractionOptions.FromSettings(s, _chkOnlyTemplate.Checked && tpl.Entries.Count > 0 ? tpl : null);
+                options.SplitByVisibility = _chkSplitVis.Checked;
+                options.SplitByLayer = false;
+                options.SplitAttributeKeys = new List<string>();
+                Logger.Log($"[MultiDrawingDialog] Thống kê {files.Count} file{(_chkCurrent.Checked ? " + bản vẽ đang mở" : "")} [{options}]");
                 _rows = MultiDrawingCounter.Count(_doc, files, _chkCurrent.Checked, options, tpl, _chkOnlyTemplate.Checked,
                                                   !s.CountDuplicateBlocks, label => { _lblStatus.Text = "Đang đọc " + label + "..."; System.Windows.Forms.Application.DoEvents(); },
                                                   out _labels, out var errors);
@@ -166,10 +168,13 @@ namespace LHBBlockScheduler.UI
         private void ExportAcad()
         {
             if (_rows.Count == 0) return;
+            // v9.4: bảng vào không gian đang làm việc; ở Layout thì hỏi dùng tỉ lệ 1
+            double? scale = UiKit.ScaleForCurrentSpace(this, _doc, SettingsManager.Current.TableScale);
+            if (scale == null) return;
             if (!UiKit.PickPoint(this, _doc, "\nChọn điểm chèn bảng thống kê nhiều bản vẽ: ", out var pt)) return;
             try
             {
-                var cfg = new TableExportConfig { TableScale = SettingsManager.Current.TableScale };
+                var cfg = new TableExportConfig { TableScale = scale.Value };
                 var headers = Headers();
                 var text = Rows().Select(r => r.Select(x => x?.ToString() ?? "").ToArray()).ToList();
                 List<BlockItem> symbols;

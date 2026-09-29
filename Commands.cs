@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -32,11 +31,14 @@ namespace LHBBlockScheduler
                 bool onlyTemplate = TemplateLibraryManager.IsFilterActive(template);
                 Logger.Log($"LHBSCAN: bộ block mẫu '{template.Name}' ({template.Entries.Count} block), chỉ quét block mẫu={onlyTemplate}");
 
-                var items = BlockExtractor.ExtractFromSelection(doc, null, onlyTemplate ? template : null);
+                // v9.4: tuỳ chọn quét theo settings (form lưu lại khi đổi) - trước đây LHBSCAN luôn dùng mặc định
+                var options = ExtractionOptions.FromSettings(SettingsManager.Current, onlyTemplate ? template : null);
+                var items = BlockExtractor.ExtractFromSelection(doc, options, out var selectedIds);
                 if (items == null) return;
 
                 // Tên thống kê / đơn vị / thứ tự theo block mẫu
                 items = TemplateLibraryManager.Apply(items, template, onlyTemplate);
+                WriteScanStats(ed, options.Stats);
                 if (items.Count == 0)
                 {
                     ed.WriteMessage(onlyTemplate
@@ -45,7 +47,7 @@ namespace LHBBlockScheduler
                     return;
                 }
 
-                var form = new BlockScheduleForm(items, doc);
+                var form = new BlockScheduleForm(items, doc, selectedIds, options.Stats);
                 Application.ShowModelessDialog(form);
             }
             catch (Exception ex)
@@ -75,23 +77,27 @@ namespace LHBBlockScheduler
 
         // ============================== PREMIUM (v9) ==============================
 
+        /// <summary>In số liệu lần quét (ARRAY / MINSERT / XREF / cảnh báo độ sâu) ra dòng lệnh - v9.4.</summary>
+        internal static void WriteScanStats(Editor ed, ScanStats stats)
+        {
+            if (ed == null || stats == null) return;
+            ed.WriteMessage($"\n[LHB] Quét: {stats.Summary()}.");
+            string warn = stats.DepthWarning();
+            if (warn != null) ed.WriteMessage($"\n[LHB] Lưu ý: {warn}");
+        }
+
         /// <summary>Quét chọn block cho lệnh Premium chạy riêng (không mở form): tuỳ chọn quét + block mẫu + trừ trùng theo settings.</summary>
         private static List<Models.BlockItem> ScanForPremium(Document doc)
         {
             var s = SettingsManager.Current;
             var template = TemplateLibraryManager.Load(s.CurrentTemplateSet);
             bool only = TemplateLibraryManager.IsFilterActive(template);
-            var opts = new ExtractionOptions
-            {
-                MaxDepth = s.ScanDepth > 0 ? s.ScanDepth : 2,
-                CountParentBlocks = s.CountParentBlocks,
-                SplitByVisibility = s.SplitByVisibility,
-                SplitByLayer = s.SplitByLayer,
-                SplitAttributeKeys = (s.SplitAttributeKeys ?? new List<string>()).ToList()
-            };
-            var items = BlockExtractor.ExtractFromSelection(doc, opts, only ? template : null, remember: false);
+            var opts = ExtractionOptions.FromSettings(s, only ? template : null);
+            // Lệnh chạy riêng không đụng vùng chọn của form thống kê đang mở (mỗi form giữ vùng chọn riêng từ v9.4)
+            var items = BlockExtractor.ExtractFromSelection(doc, opts, out _);
             if (items == null) return null;
             items = TemplateLibraryManager.Apply(items, template, only);
+            WriteScanStats(doc.Editor, opts.Stats);
             DuplicateFinder.Detect(items, s.DuplicateTolerance, s.DuplicateOverlapPercent);
             DuplicateFinder.SetExclusion(items, !s.CountDuplicateBlocks);
             if (items.Count == 0) doc.Editor.WriteMessage("\n[LHB] Không có block trong vùng chọn.");
@@ -462,6 +468,7 @@ namespace LHBBlockScheduler
             string actualMd5 = ComputeMd5(dllPath);
 
             sb.AppendLine("--- 1. THÔNG TIN ASSEMBLY & BUILD ---");
+            sb.AppendLine($"Phiên bản                : {MyApp.DisplayVersion} ({MyApp.AssemblyVersionText})");
             sb.AppendLine($"Đường dẫn DLL đang chạy : {dllPath}");
             sb.AppendLine($"MD5 thực tế từ DLL       : {actualMd5}");
             if (File.Exists(dllPath))
@@ -558,6 +565,8 @@ namespace LHBBlockScheduler
             {
                 sb.AppendLine($"Bộ đang dùng: '{SettingsManager.Current.CurrentTemplateSet}', chỉ quét block mẫu = {!SettingsManager.Current.ScanAllBlocks}, " +
                               $"đã chuyển thư viện cũ = {SettingsManager.Current.DeviceLibrariesMigrated}");
+                // v9.4: tuỳ chọn quét form lưu lại (LHBSCAN / lệnh Premium dùng chung)
+                sb.AppendLine($"Tuỳ chọn quét: [{ExtractionOptions.FromSettings(SettingsManager.Current)}], không đếm trùng = {!SettingsManager.Current.CountDuplicateBlocks}");
                 foreach (var set in TemplateLibraryManager.ListSets())
                 {
                     var lib = TemplateLibraryManager.Load(set);
@@ -695,12 +704,8 @@ namespace LHBBlockScheduler
             if (!File.Exists(filePath)) return "FILE_NOT_FOUND";
             try
             {
-                using (var md5 = MD5.Create())
-                using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    byte[] hash = md5.ComputeHash(stream);
-                    return BitConverter.ToString(hash).Replace("-", "").ToUpperInvariant();
-                }
+                // v9.4: HashHelper tự tính MD5 khi Windows bật chính sách FIPS (MD5.Create() ném lỗi)
+                return HashHelper.Md5HexOfFile(filePath);
             }
             catch (Exception ex)
             {

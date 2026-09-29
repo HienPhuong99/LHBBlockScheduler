@@ -25,6 +25,7 @@ namespace LHBBlockScheduler.UI
         private readonly Document _doc;
         private TemplateLibrary _lib;
         private readonly List<ObjectId> _pendingBtrIds = new List<ObjectId>();
+        private DocumentBinding _binding;
         private bool _dirty;
         private bool _loading;
 
@@ -41,6 +42,8 @@ namespace LHBBlockScheduler.UI
             BuildUi();
             RefreshSetList(setName);
             LoadSet(_cboSet.SelectedItem?.ToString() ?? TemplateLibraryManager.DefaultSetName);
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng (có thay đổi chưa lưu thì tự lưu, không hỏi)
+            _binding = DocumentBinding.Bind(this, doc);
         }
 
         private void BuildUi()
@@ -142,6 +145,12 @@ namespace LHBBlockScheduler.UI
 
             FormClosing += (s, e) =>
             {
+                // v9.4: bản vẽ đang đóng -> không hỏi (hộp thoại giữa lúc CAD đóng bản vẽ), tự lưu thay đổi chưa lưu
+                if (_binding != null && _binding.DocumentClosing)
+                {
+                    SaveOnDocumentClose();
+                    return;
+                }
                 if (!ConfirmDiscard()) e.Cancel = true;
             };
             FormClosed += (s, e) => ClearImageCache();
@@ -543,6 +552,39 @@ namespace LHBBlockScheduler.UI
         }
 
         /// <summary>Lưu file .json (thông tin) và chép định nghĩa block mới thêm vào file .dwg. Trả false nếu lỗi.</summary>
+        /// <summary>
+        /// Bản vẽ đóng khi bộ mẫu còn thay đổi chưa lưu: lưu file .json (tên, đơn vị, ảnh); chép định nghĩa block vào
+        /// &lt;bộ&gt;.dwg nếu còn làm được. Chỉ ghi log, không hiện hộp thoại.
+        /// </summary>
+        private void SaveOnDocumentClose()
+        {
+            if (!_dirty || _lib == null) return;
+            try
+            {
+                _grid.EndEdit();
+                TemplateLibraryManager.Save(_lib);
+                _dirty = false;
+                Logger.Log($"[TemplateLibraryDialog] Bản vẽ đóng -> tự lưu bộ '{_lib.Name}' ({_lib.Entries.Count} block mẫu)");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"[TemplateLibraryDialog] Tự lưu bộ '{_lib.Name}' khi bản vẽ đóng");
+                return;
+            }
+            if (_pendingBtrIds.Count == 0) return;
+            try
+            {
+                int copied = TemplateLibraryManager.SaveBlockDefinitions(_doc, _lib.Name, _pendingBtrIds);
+                _pendingBtrIds.Clear();
+                Logger.Log($"[TemplateLibraryDialog] Bản vẽ đóng -> chép {copied} định nghĩa block vào '{TemplateLibraryManager.DwgPath(_lib.Name)}'");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[TemplateLibraryDialog] Bản vẽ đóng: không chép được {_pendingBtrIds.Count} định nghĩa block ({ex.Message}) - " +
+                            "tên / đơn vị vẫn lưu, mở lại bản vẽ và bấm 'Thêm từ bản vẽ' + 'Lưu thông tin' để có hình block");
+            }
+        }
+
         private bool Action_Save()
         {
             _grid.EndEdit();

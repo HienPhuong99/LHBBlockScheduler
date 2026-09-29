@@ -71,7 +71,7 @@ namespace LHBBlockScheduler.Core
             if (logged > MaxDetailLogs) Logger.Log($"[DuplicateFinder] ... và {logged - MaxDetailLogs} vị trí trùng khác (không ghi chi tiết)");
 
             Logger.Log($"[DuplicateFinder.Detect] sai số={tol}, che lấp≥{minOverlap:P0}: {all.Count} block, {pairsChecked} cặp cần so, " +
-                       $"{groups.Count} vị trí trùng ({overlapGroups} do che lấp), thừa {extra} block ({nested} block nằm trong block cha)");
+                       $"{groups.Count} vị trí trùng ({overlapGroups} do che lấp), thừa {extra} block ({nested} block nằm trong block cha / ARRAY / MINSERT)");
         }
 
         /// <summary>
@@ -289,7 +289,7 @@ namespace LHBBlockScheduler.Core
                 tr.Commit();
             }
 
-            Logger.Log($"[DuplicateFinder.DeleteExtras] Đã xoá {deleted.Count} block thừa, bỏ qua {skippedNested} block nằm trong block cha");
+            Logger.Log($"[DuplicateFinder.DeleteExtras] Đã xoá {deleted.Count} block thừa, bỏ qua {skippedNested} block nằm trong block cha / ARRAY / phần tử MINSERT (không xoá riêng được)");
             return deleted;
         }
 

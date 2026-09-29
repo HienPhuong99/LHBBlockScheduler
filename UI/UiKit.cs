@@ -131,6 +131,34 @@ namespace LHBBlockScheduler.UI
             }
         }
 
+        /// <summary>
+        /// v9.4: bảng chèn vào không gian đang làm việc. Đang ở Layout (không gian giấy) mà tỉ lệ bảng &gt; 1 (theo Model) ->
+        /// hỏi dùng tỉ lệ 1 (chữ in đúng cỡ trên giấy). Trả tỉ lệ sẽ dùng, null = huỷ xuất.
+        /// </summary>
+        public static double? ScaleForCurrentSpace(IWin32Window owner, Document doc, double scale)
+        {
+            try
+            {
+                var db = doc.Database;
+                if (db.CurrentSpaceId == Autodesk.AutoCAD.DatabaseServices.SymbolUtilityServices.GetBlockModelSpaceId(db) || scale <= 1.0 + 1e-9)
+                    return scale;
+                string layout = Autodesk.AutoCAD.DatabaseServices.LayoutManager.Current.CurrentLayout;
+                var r = MessageBox.Show(owner,
+                    $"Bảng sẽ chèn vào Layout '{layout}' (không gian giấy), tỉ lệ bảng đang là {scale:0.##} (theo Model).\n\n" +
+                    "Yes: dùng tỉ lệ 1 (chữ in đúng cỡ trên giấy - bảng đặt trên khung tên)\n" +
+                    $"No: giữ tỉ lệ {scale:0.##}\nCancel: không xuất bảng",
+                    "Xuất bảng vào Layout", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                Logger.Log($"[UiKit] Xuất bảng vào Layout '{layout}', tỉ lệ {scale:0.##}: user chọn {r}");
+                if (r == DialogResult.Cancel) return null;
+                return r == DialogResult.Yes ? 1.0 : scale;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[UiKit] Kiểm tra không gian xuất bảng lỗi: {ex.Message}");
+                return scale;
+            }
+        }
+
         /// <summary>Hộp thoại lưu file Excel, trả đường dẫn hoặc null.</summary>
         public static string AskExcelPath(IWin32Window owner, string defaultName)
         {

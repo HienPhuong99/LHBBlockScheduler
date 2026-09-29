@@ -108,7 +108,7 @@ namespace LHBBlockScheduler.UI
                 Result = BlockReplacer.Replace(_doc, _items, o);
                 _doc.Editor.UpdateScreen();
                 MessageBox.Show(this, $"Đã thay {Result.Replaced} block." +
-                                      (Result.SkippedNested > 0 ? $"\nBỏ qua {Result.SkippedNested} block nằm trong block cha (mở block cha bằng BEDIT để thay)." : ""),
+                                      (Result.SkippedNested > 0 ? $"\nBỏ qua {Result.SkippedNested} block nằm trong block cha / ARRAY / MINSERT (mở block cha bằng BEDIT, hoặc ARRAYEDIT để thay)." : ""),
                     "Thay block", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 DialogResult = DialogResult.OK;
                 Close();

@@ -25,6 +25,8 @@ namespace LHBBlockScheduler.UI
         {
             _doc = doc;
             _items = items;
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+            DocumentBinding.Bind(this, doc);
             UiKit.InitForm(this, "Soát lỗi đếm - LHB Premium", 900, 520);
             _grid = UiKit.Grid();
             _grid.ReadOnly = true;

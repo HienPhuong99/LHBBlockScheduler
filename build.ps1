@@ -69,6 +69,9 @@ if (Test-Path $binInfo) {
 # Thay theo byte (Latin1 1:1) de giu nguyen ma hoa UTF-8 cua file LISP.
 $distInfo = "$distPath\build-info.txt"
 $md5Line = if (Test-Path $distInfo) { Get-Content $distInfo | Where-Object { $_ -match '^\s*MD5:' } | Select-Object -First 1 } else { $null }
+# v9.4: phien ban lay tu DLL (AssemblyInformationalVersion, vd "v9.4 Premium") - 1 nguon duy nhat la MyApp.Version
+$distDll = Join-Path (Resolve-Path $distPath) "LHBBlockScheduler.dll"
+$version = if (Test-Path $distDll) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($distDll).ProductVersion } else { $null }
 if ($md5Line) {
     $md5 = ($md5Line -replace '^\s*MD5:\s*', '').Trim().ToUpperInvariant()
     $latin1 = [System.Text.Encoding]::GetEncoding(28591)
@@ -76,9 +79,15 @@ if ($md5Line) {
         if (Test-Path $lsp) {
             $text = $latin1.GetString([System.IO.File]::ReadAllBytes($lsp))
             if ($text.Contains("@@LHB_BUILD_MD5@@")) {
-                [System.IO.File]::WriteAllBytes($lsp, $latin1.GetBytes($text.Replace("@@LHB_BUILD_MD5@@", $md5)))
+                $text = $text.Replace("@@LHB_BUILD_MD5@@", $md5)
                 Write-Host "   Da ghi MD5 $md5 vao $lsp" -ForegroundColor Green
             }
+            if ($version -and $text.Contains("@@LHB_VERSION@@")) {
+                # Chu "v9.4 Premium" chi co ky tu ASCII -> thay theo byte Latin1 van giu nguyen UTF-8 cua file
+                $text = $text.Replace("@@LHB_VERSION@@", $version)
+                Write-Host "   Da ghi phien ban $version vao $lsp" -ForegroundColor Green
+            }
+            [System.IO.File]::WriteAllBytes($lsp, $latin1.GetBytes($text))
         }
     }
 } else {

@@ -86,6 +86,8 @@
 ## 3. Review kỹ thuật — các phát hiện
 
 > Đường dẫn dạng `File.cs:dòng` bấm được trên GitHub. Mọi phát hiện đến từ đọc mã + build (máy review không có AutoCAD); mục ghi "cần kiểm chứng" là chỗ kết quả phụ thuộc cách AutoCAD lưu dữ liệu — xác nhận bằng bản vẽ test trước khi sửa. Khi sửa, thêm log chi tiết đúng chỗ đó (quy tắc trong `CLAUDE.md`).
+>
+> **Cập nhật 29/09/2026 — v9.4 Premium đã sửa:** A1–A6, B1–B3, C1–C3, D3, D5, E1 (hướng dẫn cài đặt + ghi chú bundle, chưa có installer), E5, `BlockReplacer` O(n²), quét chọn chỉ lấy INSERT. Số dòng trong các liên kết bên dưới là của v9.3. D2 một phần (SeriesMax R24.3, ghi rõ bundle máy dev). Chưa làm: A7, B4 (một phần: highlight bỏ ObjectId bản vẽ khác), C4, C5, D1, D2 (phần còn lại), D4, D6, E2–E4, F1–F6.
 
 ### 3.1 Độ chính xác số lượng (quan trọng nhất)
 
@@ -548,7 +550,7 @@ gantt
 
 - [ ] Test v9.3 trên máy thật theo `Dist/HUONG_DAN_TEST_20260929_v9_Premium.md` và v9.1–v9.3, gửi `LHBDIAG_*.txt` + ảnh (v9 → v9.3 đều chưa có kết quả).
 - [ ] Gom 10–20 bản vẽ thật (PCCC / điện / nước / ELV) + 1 bản vẽ có ARRAY, MINSERT, XREF → đếm tay vài loại thiết bị làm **đáp án**.
-- [ ] Yêu cầu làm **v9.4 "ổn định"**: sửa A1–A5, B1–B3, C1–C3, D3 (xem [mục 3](#3-review-kỹ-thuật--các-phát-hiện)).
+- [x] Yêu cầu làm **v9.4 "ổn định"**: sửa A1–A5, B1–B3, C1–C3, D3 (xem [mục 3](#3-review-kỹ-thuật--các-phát-hiện)) — đã làm 29/09/2026, kèm A6, D5, E1 (hướng dẫn cài đặt), E5; chờ kết quả test theo `Dist/HUONG_DAN_TEST_20260929_v9.4_Premium.md`.
 - [ ] Chốt: hình thức kinh doanh (hộ KD / công ty), bảng giá, tên miền; mở tài khoản payOS hoặc SePay.
 - [ ] Mua chứng thư ký mã (cần 1–2 tuần xác minh).
 - [ ] Mời 10–20 kỹ sư dùng beta miễn phí đổi lấy phản hồi và lời chứng thực.

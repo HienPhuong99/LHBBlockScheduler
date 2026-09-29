@@ -9,8 +9,10 @@ using LHBBlockScheduler;
 [assembly: AssemblyProduct("LHBBlockScheduler")]
 [assembly: AssemblyCopyright("")]
 [assembly: ComVisible(false)]
-[assembly: AssemblyVersion("9.3.0.0")]
-[assembly: AssemblyFileVersion("9.3.0.0")]
+// v9.4: số phiên bản lấy từ 1 chỗ duy nhất (MyApp.Version) - trước đây viết cứng ở 4 nơi, hay quên sửa 1 chỗ
+[assembly: AssemblyVersion(MyApp.AssemblyVersionText)]
+[assembly: AssemblyFileVersion(MyApp.AssemblyVersionText)]
+[assembly: AssemblyInformationalVersion(MyApp.DisplayVersion)]
 
 // Đăng ký toàn bộ command trong Commands.cs với AutoCAD
 [assembly: CommandClass(typeof(Commands))]
@@ -22,16 +24,22 @@ namespace LHBBlockScheduler
 {
     public class MyApp : IExtensionApplication
     {
+        /// <summary>Phiên bản (sửa DUY NHẤT ở đây khi ra bản mới): tiêu đề form, dòng lệnh, AssemblyVersion, LHB.lsp (build.ps1 ghi vào).</summary>
+        public const string Version = "9.4";
+        public const string AssemblyVersionText = Version + ".0.0";
+        /// <summary>"v9.4 Premium" - hiện trên tiêu đề form "Thống kê Block v9.4 Premium" và dòng lệnh lúc nạp.</summary>
+        public const string DisplayVersion = "v" + Version + " Premium";
+
         public void Initialize()
         {
-            Core.Logger.Log("=== LHBBlockScheduler đã nạp ===");
+            Core.Logger.Log($"=== LHBBlockScheduler {DisplayVersion} đã nạp ===");
             RememberInstallDir();
             RegisterAliases();
             try
             {
                 UI.RibbonBuilder.Init();
                 Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument?.Editor
-                    .WriteMessage($"\n[LHB] v9.3 Premium - {Core.LicenseManager.StatusText}. Tab Ribbon 'LHB Premium', gõ LHBPALETTE mở bảng công cụ.");
+                    .WriteMessage($"\n[LHB] {DisplayVersion} - {Core.LicenseManager.StatusText}. Tab Ribbon 'LHB Premium', gõ LHBPALETTE mở bảng công cụ.");
             }
             catch (System.Exception ex)
             {

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Colors;
@@ -64,23 +63,26 @@ namespace LHBBlockScheduler.Core
             ObjectId tableId = ObjectId.Null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
+            TableExporter.BeginImageExport();
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                // v9.4: chèn vào không gian đang làm việc (Model hoặc Layout) - trước đây luôn vào Model Space dù đang ở Layout
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                bool inModel = db.CurrentSpaceId == SymbolUtilityServices.GetBlockModelSpaceId(db);
                 ObjectId textStyleId = TableExporter.GetOrCreateTextStyle(db, tr, tpl.TextStyleName, tpl.EffectiveFont);
 
-                // 2. Tạo Table rỗng, đưa vào Model Space trước rồi mới điền nội dung
+                // 2. Tạo Table rỗng, đưa vào không gian hiện hành trước rồi mới điền nội dung
                 var tb = new Table();
                 tb.SetDatabaseDefaults(db);
                 tb.TableStyle = db.Tablestyle;
                 tb.SetSize(nRows, nCols);
                 tb.Position = insertionPointWcs;
-                ms.AppendEntity(tb);
+                space.AppendEntity(tb);
                 tr.AddNewlyCreatedDBObject(tb, true);
                 tableId = tb.ObjectId;
-                Logger.Log($"[TableExporterAcad] Đã tạo Table {nRows}x{nCols}, Handle={tb.Handle}, TableStyle={db.Tablestyle}");
+                Logger.Log($"[TableExporterAcad] Đã tạo Table {nRows}x{nCols}, Handle={tb.Handle}, TableStyle={db.Tablestyle}, " +
+                           $"không gian='{TableExporter.SpaceName(tr, space)}'{(inModel ? "" : " (Layout)")}");
                 SuppressRegen(tb, true);
                 var symbolCache = new Dictionary<string, SymbolInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -167,11 +169,15 @@ namespace LHBBlockScheduler.Core
                         info.TextHeight = textHeight;
                         info.RowHeight = rowHeight;
                         info.TotalLabel = tpl.EffectiveTotalLabel;
-                        info.Rows = sortedItems.Select(it => new TableRowKeys
+                        info.Rows = sortedItems.Select((it, i) => new TableRowKeys
                         {
                             Keys = (it.Instances ?? new List<BlockInstanceRef>()).Select(x => x.GroupKey).Where(k => !string.IsNullOrEmpty(k))
-                                                                             .Distinct().ToList()
+                                                                             .Distinct().ToList(),
+                            Label = TableUpdater.RowLabel(tb, firstDataRow + i, info.ColumnKeys)
                         }).ToList();
+                        // v9.4: cấu trúc bảng lúc ghi -> LHBCAPNHAT dừng nếu user thêm / xoá dòng, cột bằng tay
+                        info.TableRowCount = nRows;
+                        info.TableColumnCount = nCols;
                         info.UpdatedAt = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
                         DrawingHelper.WriteExtString(tr, tb, TableUpdater.ExtKey, JsonHelper.Serialize(info));
                         Logger.Log($"[TableExporterAcad] Lưu thông tin tự cập nhật: {info.Rows.Count} dòng, vùng quét " +
@@ -188,8 +194,14 @@ namespace LHBBlockScheduler.Core
                 tb.RecomputeTableBlock(true);
                 Logger.Log($"[TableExporterAcad] Điền bảng xong sau {sw.ElapsedMilliseconds} ms ({symbolCache.Count} block ký hiệu)");
 
-                // Đường dẫn từ mép phải từng dòng thiết bị tới chỗ block trùng (lỗi ở đây không được làm hỏng bảng)
-                try
+                // Đường dẫn từ mép phải từng dòng thiết bị tới chỗ block trùng (lỗi ở đây không được làm hỏng bảng).
+                // Block trùng nằm ở Model -> bảng trên Layout không vẽ đường dẫn (toạ độ giấy khác toạ độ Model).
+                if (!inModel)
+                {
+                    int dupRows = sortedItems.Count(i => i.DuplicateGroups != null && i.DuplicateGroups.Count > 0);
+                    if (dupRows > 0) Logger.Log($"[TableExporterAcad] Bảng trên Layout -> không vẽ đường dẫn tới {dupRows} dòng có block trùng (dùng nút 'Tìm trùng' để khoanh ở Model)");
+                }
+                else try
                 {
                     double tableWidth = 0;
                     for (int c = 0; c < nCols; c++) tableWidth += tb.Columns[c].Width;
@@ -204,7 +216,7 @@ namespace LHBBlockScheduler.Core
                     var anchors = sortedItems
                         .Select((item, i) => (item, new Point3d(tb.Position.X + tableWidth, rowMidY[i + firstDataRow], tb.Position.Z)))
                         .ToList();
-                    DuplicateFinder.DrawTableLeaders(tr, db, ms, anchors, rowHeight * 0.5, textHeight);
+                    DuplicateFinder.DrawTableLeaders(tr, db, space, anchors, rowHeight * 0.5, textHeight);
                 }
                 catch (Exception ex)
                 {
@@ -215,6 +227,7 @@ namespace LHBBlockScheduler.Core
             }
 
             Logger.Log($"[TableExporterAcad] Hoàn tất: ô ký hiệu OK={okSymbols}, lỗi/trống={failSymbols}");
+            TableExporter.EndImageExport(doc);
 
             // 6. Zoom tới bảng
             try
@@ -265,17 +278,19 @@ namespace LHBBlockScheduler.Core
             }
 
             ObjectId tableId;
+            TableExporter.BeginImageExport();
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var ms = (BlockTableRecord)tr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(db), OpenMode.ForWrite);
+                // v9.4: không gian đang làm việc (Model hoặc Layout)
+                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
                 var styleId = TableExporter.GetOrCreateTextStyle(db, tr, tpl.TextStyleName, tpl.EffectiveFont);
                 var tb = new Table();
                 tb.SetDatabaseDefaults(db);
                 tb.TableStyle = db.Tablestyle;
                 tb.SetSize(nRows, nCols);
                 tb.Position = pt;
-                ms.AppendEntity(tb);
+                space.AppendEntity(tb);
                 tr.AddNewlyCreatedDBObject(tb, true);
                 tableId = tb.ObjectId;
                 SuppressRegen(tb, true);
@@ -327,6 +342,7 @@ namespace LHBBlockScheduler.Core
                 tr.Commit();
             }
             Logger.Log($"[TableExporterAcad.ExportGrid] '{title}': {rows.Count} dòng x {nCols} cột tại {pt}");
+            TableExporter.EndImageExport(doc);
             try
             {
                 using (var tr = db.TransactionManager.StartTransaction())
@@ -642,6 +658,19 @@ namespace LHBBlockScheduler.Core
 
             ObjectId defId = !item.DynamicBtrId.IsNull && item.DynamicBtrId.IsValid ? item.DynamicBtrId : item.SourceBtrId;
             string baseName = defId.IsNull ? item.BlockName : GetBtrName(tr, defId);
+
+            // v9.4: block của XREF (đếm trong XREF): không chèn / chép định nghĩa phụ thuộc XREF vào block ký hiệu (gỡ / nạp
+            // lại XREF làm hỏng tham chiếu) -> dùng ảnh ký hiệu đã render (chép cạnh DWG như ảnh tuỳ chỉnh)
+            if (IsXrefDependent(tr, defId))
+            {
+                if (!string.IsNullOrEmpty(item.ThumbnailPath) && File.Exists(item.ThumbnailPath))
+                {
+                    Logger.Log($"[TableExporterAcad] '{baseName}' là block của XREF -> ô ký hiệu dùng ảnh '{item.ThumbnailPath}'");
+                    return GetOrCreateImageBlock(db, tr, item.ThumbnailPath);
+                }
+                Logger.Warn($"[TableExporterAcad] '{baseName}' là block của XREF, chưa có ảnh ký hiệu -> để trống ô");
+                return new SymbolInfo { Mode = "XrefNoImage" };
+            }
 
             // b) Dynamic block có visibility -> copy instance
             ObjectId instanceId = ObjectId.Null;
@@ -1068,6 +1097,8 @@ namespace LHBBlockScheduler.Core
             {
                 sym.BtrId = bt[name];
                 var oldBtr = (BlockTableRecord)tr.GetObject(sym.BtrId, OpenMode.ForRead);
+                // Bảng xuất trước v9.4: ảnh trỏ vào %APPDATA% -> chép cạnh DWG, trỏ lại
+                TableExporter.RelinkImagesToDrawing(db, tr, oldBtr, name);
                 if (ExtentsHelper.TryGetBtrExtents(tr, oldBtr, out var e))
                 {
                     sym.Width = e.MaxPoint.X - e.MinPoint.X;
@@ -1082,8 +1113,11 @@ namespace LHBBlockScheduler.Core
             if (imgDictId.IsNull) imgDictId = RasterImageDef.CreateImageDictionary(db);
             var imgDict = (DBDictionary)tr.GetObject(imgDictId, OpenMode.ForWrite);
 
-            var imgDef = new RasterImageDef { SourceFileName = imagePath };
-            imgDef.Load();
+            // v9.4: chép ảnh vào <thư mục DWG>\<tên DWG>_LHBImages\ và trỏ đường dẫn tương đối -> gửi DWG kèm thư mục ảnh
+            // không mất ảnh (trước đây trỏ thẳng %APPDATA%\LHBBlockScheduler\CustomImages của máy xuất bảng)
+            var imgDef = new RasterImageDef();
+            string localPath = TableExporter.LocalizeImage(db, imagePath, out string relativePath);
+            TableExporter.SetImageSource(imgDef, localPath, relativePath, name);
             ObjectId imgDefId = imgDict.SetAt(name, imgDef);
             tr.AddNewlyCreatedDBObject(imgDef, true);
 
@@ -1113,6 +1147,17 @@ namespace LHBBlockScheduler.Core
             return sym;
         }
 
+        private static bool IsXrefDependent(Transaction tr, ObjectId btrId)
+        {
+            if (btrId.IsNull || !btrId.IsValid) return false;
+            try
+            {
+                var btr = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
+                return btr.IsDependent || btr.IsFromExternalReference;
+            }
+            catch { return false; }
+        }
+
         private static string GetBtrName(Transaction tr, ObjectId btrId)
         {
             try { return ((BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead)).Name; }
@@ -1129,13 +1174,7 @@ namespace LHBBlockScheduler.Core
             return s.Length > 60 ? s.Substring(0, 60) : s;
         }
 
-        private static string ShortHash(string s)
-        {
-            using (var md5 = MD5.Create())
-            {
-                byte[] h = md5.ComputeHash(Encoding.UTF8.GetBytes(s ?? ""));
-                return BitConverter.ToString(h, 0, 4).Replace("-", "");
-            }
-        }
+        /// <summary>8 ký tự hex đầu MD5 (giữ đúng tên block ký hiệu như bản trước; máy bật FIPS tự tính MD5 - v9.4).</summary>
+        private static string ShortHash(string s) => HashHelper.ShortHash(s);
     }
 }

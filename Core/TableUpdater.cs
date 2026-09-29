@@ -14,6 +14,8 @@ namespace LHBBlockScheduler.Core
     public class TableRowKeys
     {
         public List<string> Keys { get; set; } = new List<string>();
+        /// <summary>v9.4: chữ các cột tên / chủng loại... lúc ghi (đối chiếu khi cập nhật, báo dòng bị sửa tay).</summary>
+        public string Label { get; set; }
     }
 
     /// <summary>
@@ -27,6 +29,8 @@ namespace LHBBlockScheduler.Core
         public bool CountParentBlocks { get; set; }
         public bool SplitByVisibility { get; set; }
         public bool SplitByLayer { get; set; }
+        /// <summary>v9.4: đếm cả block trong XREF (bảng cũ thiếu field -> false = bỏ qua XREF như mặc định mới).</summary>
+        public bool CountXrefBlocks { get; set; }
         public List<string> SplitAttributeKeys { get; set; } = new List<string>();
         public string TemplateSet { get; set; }
         public bool OnlyTemplate { get; set; }
@@ -48,6 +52,19 @@ namespace LHBBlockScheduler.Core
         public double RowHeight { get; set; }
         public List<TableRowKeys> Rows { get; set; } = new List<TableRowKeys>();
         public string UpdatedAt { get; set; }
+        /// <summary>
+        /// v9.4: số dòng / cột của bảng lúc ghi (0 = bảng xuất trước v9.4 -> tính từ FirstDataRow + Rows). Khác lúc cập nhật
+        /// = bảng bị thêm / xoá dòng, cột bằng tay -> không cập nhật (trước đây ghi nhầm dòng vì khớp theo chỉ số dòng).
+        /// </summary>
+        public int TableRowCount { get; set; }
+        public int TableColumnCount { get; set; }
+        /// <summary>
+        /// v9.4: Handseed (handle kế tiếp, hex) lúc quét: khi cập nhật chỉ thêm block MỚI (handle ≥ mức này) nằm trong khung
+        /// vùng quét, không kéo thêm block cũ ngoài vùng chọn ban đầu (chọn đa giác / crossing). null = bảng cũ.
+        /// </summary>
+        public string HandseedAtScan { get; set; }
+        /// <summary>v9.4: vùng chọn quá 20000 đối tượng, RootHandles bị cắt -> cập nhật đếm mọi block trong khung như cũ.</summary>
+        public bool RootsTruncated { get; set; }
     }
 
     /// <summary>
@@ -95,21 +112,28 @@ namespace LHBBlockScheduler.Core
             ed.WriteMessage($"\n[LHB] Cập nhật {updated} bảng" + (skipped > 0 ? $", bỏ qua {skipped} bảng không phải bảng LHB Premium (xuất từ v9 trở lên)" : "") + ".\n");
         }
 
+        /// <summary>Mọi bảng LHB (có thông tin tự cập nhật) trong Model VÀ các Layout (v9.4: bảng có thể nằm trên Layout).</summary>
         public static List<ObjectId> FindAllLhbTables(Database db)
         {
             var list = new List<ObjectId>();
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var ms = (BlockTableRecord)tr.GetObject(SymbolUtilityServices.GetBlockModelSpaceId(db), OpenMode.ForRead);
                 var rx = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Table));
-                foreach (ObjectId id in ms)
+                var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                foreach (ObjectId btrId in bt)
                 {
-                    if (!id.ObjectClass.IsDerivedFrom(rx)) continue;
-                    var tb = (Table)tr.GetObject(id, OpenMode.ForRead);
-                    if (DrawingHelper.ReadExtString(tr, tb, ExtKey) != null) list.Add(id);
+                    var space = (BlockTableRecord)tr.GetObject(btrId, OpenMode.ForRead);
+                    if (!space.IsLayout) continue;
+                    foreach (ObjectId id in space)
+                    {
+                        if (!id.ObjectClass.IsDerivedFrom(rx)) continue;
+                        var tb = (Table)tr.GetObject(id, OpenMode.ForRead);
+                        if (DrawingHelper.ReadExtString(tr, tb, ExtKey) != null) list.Add(id);
+                    }
                 }
                 tr.Commit();
             }
+            Logger.Log($"[TableUpdater] Tìm thấy {list.Count} bảng LHB trong Model + Layout");
             return list;
         }
 
@@ -130,6 +154,14 @@ namespace LHBBlockScheduler.Core
             info.SplitAttributeKeys ??= new List<string>();
             info.RootHandles ??= new List<string>();
 
+            // 0. v9.4: bảng bị thêm / xoá dòng, cột bằng tay -> dừng (khớp dòng theo chỉ số sẽ ghi nhầm dòng)
+            string structureError = CheckStructure(db, tableId, info);
+            if (structureError != null)
+            {
+                Logger.Warn($"[TableUpdater] Bảng Handle {tableId.Handle}: {structureError}");
+                return $"Bảng Handle {tableId.Handle}: KHÔNG cập nhật - {structureError}";
+            }
+
             // 1. Đối tượng cần quét: gốc cũ còn tồn tại + block trong khung vùng quét
             var roots = new HashSet<ObjectId>();
             foreach (var h in info.RootHandles)
@@ -138,29 +170,42 @@ namespace LHBBlockScheduler.Core
                 if (!id.IsNull) roots.Add(id);
             }
             int oldRootsAlive = roots.Count;
+            // v9.4: bảng mới lưu Handseed lúc quét -> chỉ thêm block tạo SAU lúc quét trong khung (không kéo block cũ ngoài
+            // vùng chọn đa giác / crossing ban đầu). Bảng cũ / vùng chọn bị cắt: mọi block trong khung như trước.
+            long handseed = 0;
+            bool onlyNew = !info.RootsTruncated && !string.IsNullOrEmpty(info.HandseedAtScan) &&
+                           long.TryParse(info.HandseedAtScan, System.Globalization.NumberStyles.HexNumber, null, out handseed);
+            int inBox = 0, oldOutsideSelection = 0;
             using (var tr = db.TransactionManager.StartTransaction())
             {
                 foreach (var id in BlockExtractor.ModelSpaceBlockIds(db))
                 {
                     var br = (BlockReference)tr.GetObject(id, OpenMode.ForRead);
                     var p = br.Position;
-                    if (p.X >= info.MinX && p.X <= info.MaxX && p.Y >= info.MinY && p.Y <= info.MaxY) roots.Add(id);
+                    if (!(p.X >= info.MinX && p.X <= info.MaxX && p.Y >= info.MinY && p.Y <= info.MaxY)) continue;
+                    inBox++;
+                    if (onlyNew && id.Handle.Value < handseed && !roots.Contains(id)) { oldOutsideSelection++; continue; }
+                    roots.Add(id);
                 }
                 tr.Commit();
             }
+            Logger.Log($"[TableUpdater] Bảng Handle {tableId.Handle}: {oldRootsAlive}/{info.RootHandles.Count} gốc cũ còn lại, {inBox} block trong khung, " +
+                       (onlyNew ? $"bỏ {oldOutsideSelection} block cũ không thuộc vùng chọn ban đầu (Handseed {info.HandseedAtScan})" : "bảng cũ: lấy mọi block trong khung"));
 
             // 2. Quét lại với đúng tuỳ chọn lúc xuất
+            var template = TemplateLibraryManager.Load(info.TemplateSet);
+            bool onlyTemplate = info.OnlyTemplate && template.Entries.Count > 0;
             var options = new ExtractionOptions
             {
                 MaxDepth = info.MaxDepth > 0 ? info.MaxDepth : 2,
                 CountParentBlocks = info.CountParentBlocks,
                 SplitByVisibility = info.SplitByVisibility,
                 SplitByLayer = info.SplitByLayer,
-                SplitAttributeKeys = info.SplitAttributeKeys
+                SplitAttributeKeys = info.SplitAttributeKeys,
+                CountXrefBlocks = info.CountXrefBlocks,
+                TemplateFilter = onlyTemplate ? template : null
             };
             var items = BlockExtractor.ExtractFromDatabase(db, roots, options);
-            var template = TemplateLibraryManager.Load(info.TemplateSet);
-            bool onlyTemplate = info.OnlyTemplate && template.Entries.Count > 0;
             items = TemplateLibraryManager.Apply(items, template, onlyTemplate);
             DuplicateFinder.Detect(items, SettingsManager.Current.DuplicateTolerance, SettingsManager.Current.DuplicateOverlapPercent);
             DuplicateFinder.SetExclusion(items, !info.IncludeDuplicates);
@@ -176,7 +221,7 @@ namespace LHBBlockScheduler.Core
                     byKey[k] = it;
 
             // 3. Ghi vào bảng
-            int changedCells = 0, newRows = 0, zeroRows = 0;
+            int changedCells = 0, newRows = 0, zeroRows = 0, renamedRows = 0;
             var usedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var red = Color.FromColorIndex(ColorMethod.ByAci, 1);
             var normal = Color.FromColorIndex(ColorMethod.ByBlock, 0);
@@ -196,6 +241,11 @@ namespace LHBBlockScheduler.Core
                     int r = info.FirstDataRow + i;
                     if (r >= tb.Rows.Count) break;
                     var keys = info.Rows[i].Keys ?? new List<string>();
+                    // Chữ tên / chủng loại khác lúc ghi: user sửa tay (được phép) - ghi log để soát khi số liệu lạ
+                    if (info.Rows[i].Label != null && info.Rows[i].Label != RowLabel(tb, r, info.ColumnKeys))
+                    {
+                        if (renamedRows++ < 20) Logger.Log($"[TableUpdater] Dòng {i + 1}: chữ khác lúc ghi '{info.Rows[i].Label}' -> '{RowLabel(tb, r, info.ColumnKeys)}' (sửa tay?)");
+                    }
                     if (keys.Count == 0) continue; // dòng nhập tay -> giữ nguyên
                     var matched = keys.Where(byKey.ContainsKey).Select(k => byKey[k]).Distinct().ToList();
                     foreach (var k in keys) usedKeys.Add(k);
@@ -259,7 +309,11 @@ namespace LHBBlockScheduler.Core
                             tb.Cells[r, c].ContentColor = red;
                         }
                         if (symbolCol >= 0) TableExporterAcad.PutSymbol(db, tr, tb, r, symbolCol, it, tb.Columns[symbolCol].Width, rowH);
-                        info.Rows.Add(new TableRowKeys { Keys = it.Instances.Select(x => x.GroupKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().ToList() });
+                        info.Rows.Add(new TableRowKeys
+                        {
+                            Keys = it.Instances.Select(x => x.GroupKey).Where(k => !string.IsNullOrEmpty(k)).Distinct().ToList(),
+                            Label = RowLabel(tb, r, info.ColumnKeys)
+                        });
                         newRows++;
                     }
                 }
@@ -274,17 +328,57 @@ namespace LHBBlockScheduler.Core
                 }
 
                 info.UpdatedAt = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+                info.TableRowCount = tb.Rows.Count;
+                info.TableColumnCount = tb.Columns.Count;
                 DrawingHelper.WriteExtString(tr, tb, ExtKey, JsonHelper.Serialize(info));
                 TableExporterAcad.SuppressRegen(tb, false);
                 tb.GenerateLayout();
                 tr.Commit();
             }
 
+            var st = options.Stats;
+            if (st != null) Logger.Log($"[TableUpdater] Bảng Handle {tableId.Handle}: {st.Summary()}");
             string summary = $"Bảng Handle {tableId.Handle}: quét {roots.Count} đối tượng ({oldRootsAlive} gốc cũ còn lại), " +
                              $"{changedCells} ô thay đổi (tô đỏ), {newRows} loại block mới thêm dòng" +
-                             (zeroRows > 0 ? $", {zeroRows} dòng không còn block (SL = 0)" : "");
+                             (zeroRows > 0 ? $", {zeroRows} dòng không còn block (SL = 0)" : "") +
+                             (renamedRows > 0 ? $", {renamedRows} dòng có chữ tên / chủng loại đã sửa tay (giữ nguyên)" : "");
             Logger.Log("[TableUpdater] " + summary);
             return summary;
+        }
+
+        /// <summary>
+        /// v9.4: số dòng / cột hiện tại phải đúng như lúc ghi (bảng cũ: tính từ FirstDataRow + số dòng + dòng tổng).
+        /// Trả câu lỗi nếu bảng đã bị sửa cấu trúc bằng tay, null nếu dùng được.
+        /// </summary>
+        private static string CheckStructure(Database db, ObjectId tableId, TableScanInfo info)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var tb = (Table)tr.GetObject(tableId, OpenMode.ForRead);
+                int rows = tb.Rows.Count, cols = tb.Columns.Count;
+                tr.Commit();
+                int expRows = info.TableRowCount > 0 ? info.TableRowCount : info.FirstDataRow + info.Rows.Count + (info.HasTotalRow ? 1 : 0);
+                int expCols = info.TableColumnCount > 0 ? info.TableColumnCount : info.ColumnKeys.Count;
+                if (rows == expRows && cols == expCols) return null;
+                return $"bảng đã bị thêm / xoá dòng hoặc cột bằng tay (hiện {rows} dòng x {cols} cột, lúc ghi {expRows} x {expCols}): " +
+                       "cập nhật theo vị trí dòng sẽ ghi nhầm dòng. Xuất lại bảng mới từ form thống kê (LHBSCAN).";
+            }
+        }
+
+        /// <summary>Chữ các cột không bị cập nhật (tên, chủng loại, đơn vị...) của 1 dòng bảng, nối bằng " | ".</summary>
+        internal static string RowLabel(Table tb, int row, List<string> columnKeys)
+        {
+            var parts = new List<string>();
+            for (int c = 0; c < columnKeys.Count && c < tb.Columns.Count; c++)
+            {
+                string k = columnKeys[c];
+                if (k == "STT" || k == "colCount" || k == "colThumbnail" ||
+                    k.StartsWith(ZoneManager.ColumnPrefix, StringComparison.OrdinalIgnoreCase) ||
+                    k.StartsWith(PremiumColumns.AttrPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+                try { parts.Add((tb.Cells[row, c].TextString ?? "").Trim()); }
+                catch { parts.Add(""); }
+            }
+            return string.Join(" | ", parts);
         }
 
         /// <summary>Khung vùng quét = khung bao các đối tượng đã chọn (mở rộng 1%).</summary>

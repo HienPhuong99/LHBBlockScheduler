@@ -39,7 +39,7 @@ namespace LHBBlockScheduler.UI
             _premiumMenu.Items.Add(new ToolStripSeparator());
             Item("Xuất Excel...", Premium_ExportExcel);
             Item("Mẫu bảng xuất...", () => { if (UiKit.Premium("Mẫu bảng xuất")) using (var d = new TableTemplateDialog()) d.ShowDialog(this); });
-            Item("Cập nhật bảng đã xuất (LHBCAPNHAT)", () => { if (UiKit.Premium("Cập nhật bảng")) _doc.SendStringToExecute("LHBCAPNHAT ", true, false, true); });
+            Item("Cập nhật bảng đã xuất (LHBCAPNHAT)", () => { if (UiKit.Premium("Cập nhật bảng") && EnsureDocActive()) _doc.SendStringToExecute("LHBCAPNHAT ", true, false, true); });
             Item("Chiều dài ống / dây...", () =>
             {
                 if (!UiKit.Premium("Chiều dài ống / dây")) return;
@@ -123,22 +123,30 @@ namespace LHBBlockScheduler.UI
         private TableScanInfo BuildScanInfo()
         {
             var o = CurrentOptions();
-            var roots = BlockExtractor.LastSelectedObjectIds;
+            // v9.4: vùng chọn của riêng form này (không còn biến static dùng chung mọi bản vẽ)
+            var roots = _selectedIds.Where(id => !id.IsNull && id.IsValid && !id.IsErased).ToList();
+            const int maxRoots = 20000;
             var info = new TableScanInfo
             {
-                Version = 1,
+                Version = 2,
                 MaxDepth = o.MaxDepth,
                 CountParentBlocks = o.CountParentBlocks,
                 SplitByVisibility = o.SplitByVisibility,
                 SplitByLayer = o.SplitByLayer,
+                CountXrefBlocks = o.CountXrefBlocks,
                 SplitAttributeKeys = o.SplitAttributeKeys,
                 TemplateSet = CurrentTemplate().Name,
                 OnlyTemplate = _chkOnlyTemplate.Checked,
                 IncludeDuplicates = !_chkExcludeDup.Checked,
                 UseZones = _premiumColumnKeys.Any(k => k.StartsWith(ZoneManager.ColumnPrefix)),
-                RootHandles = roots.Take(20000).Select(DrawingHelper.HandleString).ToList()
+                RootHandles = roots.Take(maxRoots).Select(DrawingHelper.HandleString).ToList(),
+                RootsTruncated = roots.Count > maxRoots,
+                // Block tạo sau thời điểm này có handle >= Handseed -> LHBCAPNHAT chỉ thêm block MỚI trong khung vùng quét
+                HandseedAtScan = _doc.Database.Handseed.Value.ToString("X")
             };
             TableUpdater.FillScanBox(_doc.Database, roots, info);
+            Logger.Log($"[BlockScheduleForm] Thông tin tự cập nhật: {roots.Count} đối tượng gốc{(info.RootsTruncated ? $" (lưu {maxRoots} đầu)" : "")}, " +
+                       $"Handseed {info.HandseedAtScan}, [{o}]");
             return info;
         }
 
@@ -187,19 +195,19 @@ namespace LHBBlockScheduler.UI
 
         private void Premium_Numbering()
         {
-            if (!UiKit.Premium("Đánh số thiết bị")) return;
+            if (!UiKit.Premium("Đánh số thiết bị") || !EnsureDocActive()) return;
             using (var d = new NumberingDialog(_doc, SelectedOrAll())) d.ShowDialog(this);
         }
 
         private void Premium_Coverage()
         {
-            if (!UiKit.Premium("Vùng bảo vệ PCCC")) return;
+            if (!UiKit.Premium("Vùng bảo vệ PCCC") || !EnsureDocActive()) return;
             using (var d = new CoverageDialog(_doc, SelectedOrAll())) d.ShowDialog(this);
         }
 
         private void Premium_Replace()
         {
-            if (!UiKit.Premium("Thay block")) return;
+            if (!UiKit.Premium("Thay block") || !EnsureDocActive()) return;
             var sel = GetSelectedItems();
             if (sel.Count == 0)
             {
@@ -209,10 +217,12 @@ namespace LHBBlockScheduler.UI
             using (var d = new ReplaceBlockDialog(_doc, sel))
             {
                 if (d.ShowDialog(this) != DialogResult.OK || d.Result == null || d.Result.Replaced == 0) return;
-                // Block cũ đã xoá, block mới là đối tượng gốc mới -> quét lại
-                var roots = BlockExtractor.LastSelectedObjectIds;
-                roots.RemoveAll(id => d.Result.OldIds.Contains(id));
-                roots.AddRange(d.Result.NewIds);
+                // Block cũ đã xoá, block mới là đối tượng gốc mới -> quét lại (vùng chọn của riêng form này)
+                var oldIds = new HashSet<Autodesk.AutoCAD.DatabaseServices.ObjectId>(d.Result.OldIds);
+                _selectedIds.RemoveAll(oldIds.Contains);
+                _selectedSet.ExceptWith(oldIds);
+                foreach (var id in d.Result.NewIds)
+                    if (_selectedSet.Add(id)) _selectedIds.Add(id);
                 TriggerReExtraction();
             }
         }

@@ -27,6 +27,8 @@ namespace LHBBlockScheduler.UI
         public ZoneDialog(Document doc)
         {
             _doc = doc;
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+            DocumentBinding.Bind(this, doc);
             UiKit.InitForm(this, "Tầng / khu vực - LHB Premium", 640, 460);
             _grid = UiKit.Grid();
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colName", HeaderText = "Tên khu vực (tên cột trong bảng)", Width = 260 });
