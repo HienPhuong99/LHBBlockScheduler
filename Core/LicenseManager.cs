@@ -125,7 +125,15 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        public static bool IsLicensed => Current.Valid;
+        /// <summary>
+        /// false = CHƯA bắt bản quyền (yêu cầu user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"):
+        /// Premium mở cho mọi máy, không cần mã, chưa ghi / chưa đếm ngày dùng thử. Mã kích hoạt vẫn nhập và kiểm được.
+        /// Khi user bảo bắt bản quyền: đổi thành true rồi build bản mới -> dùng thử 30 ngày, hết hạn cần mã theo mã máy.
+        /// (static readonly thay vì const để không có cảnh báo "code không chạy tới".)
+        /// </summary>
+        public static readonly bool Enforced = false;
+
+        public static bool IsLicensed => !Enforced || Current.Valid;
 
         /// <summary>Ngày bắt đầu dùng thử (ghi registry lần đầu gọi).</summary>
         public static DateTime TrialStart
@@ -150,7 +158,8 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        public static int TrialDaysLeft => Math.Max(0, TrialDays - (int)(DateTime.Today - TrialStart).TotalDays);
+        /// <summary>Số ngày dùng thử còn lại. Chưa bắt bản quyền: không đụng registry (ngày dùng thử chưa bắt đầu).</summary>
+        public static int TrialDaysLeft => !Enforced ? TrialDays : Math.Max(0, TrialDays - (int)(DateTime.Today - TrialStart).TotalDays);
 
         public static string StatusText
         {
@@ -158,6 +167,7 @@ namespace LHBBlockScheduler.Core
             {
                 var c = Current;
                 if (c.Valid) return c.Expiry.HasValue ? $"Đã kích hoạt Premium, hạn đến {c.Expiry.Value:dd/MM/yyyy}" : "Đã kích hoạt Premium vĩnh viễn";
+                if (!Enforced) return "Premium miễn phí (chưa bật bản quyền, không cần mã)";
                 int left = TrialDaysLeft;
                 return left > 0 ? $"Dùng thử Premium: còn {left} ngày" : "Hết hạn dùng thử Premium";
             }

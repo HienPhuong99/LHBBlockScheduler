@@ -63,6 +63,9 @@ namespace LHBBlockScheduler.UI
 
         private void UpdateStatus()
         {
+            // Chưa bắt bản quyền: mọi tính năng Premium mở sẵn, ô mã kích hoạt để trống cũng được
+            if (!LicenseManager.Enforced && string.IsNullOrWhiteSpace(_txtKey.Text))
+                _txtKey.Text = "(Bản hiện tại miễn phí: không cần mã kích hoạt, mọi tính năng Premium đã mở)";
             _lblStatus.Text = LicenseManager.StatusText;
             _lblStatus.ForeColor = LicenseManager.IsLicensed ? Color.FromArgb(39, 174, 96)
                                  : LicenseManager.TrialDaysLeft > 0 ? Color.FromArgb(211, 84, 0) : Color.FromArgb(192, 57, 43);
@@ -70,6 +73,14 @@ namespace LHBBlockScheduler.UI
 
         private void Activate_Click()
         {
+            if (!LicenseManager.Enforced && !_txtKey.Text.Trim().StartsWith("LHB1."))
+            {
+                MessageBox.Show(this, "Bản hiện tại miễn phí, không cần mã kích hoạt. Mọi tính năng Premium đã dùng được.",
+                    "Kích hoạt", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                DialogResult = DialogResult.OK;
+                Close();
+                return;
+            }
             var info = LicenseManager.Check(_txtKey.Text);
             if (!info.Valid)
             {

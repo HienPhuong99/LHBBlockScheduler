@@ -27,7 +27,7 @@
   (princ "\n  - LHBSCAN       : Mở giao diện Thống kê Block đầy đủ tính năng")
   (princ "\n  - LHBMAU        : Thư viện block mẫu (thêm / xoá / sắp xếp / chèn block mẫu)")
   (princ "\n  - LHBLENH       : Bảng danh sách lệnh, chạy lệnh, đổi phím tắt (mặc định gõ LHB)")
-  (princ "\n  ---- PREMIUM (v9.2) ----")
+  (princ "\n  ---- PREMIUM (v9.3) ----")
   (princ "\n  - LHBKHUVUC     : Tầng / khu vực -> bảng có cột SL từng khu")
   (princ "\n  - LHBCAPNHAT    : Cập nhật bảng đã xuất sau khi sửa bản vẽ")
   (princ "\n  - LHBNHIEUBV    : Thống kê nhiều bản vẽ DWG cùng lúc")

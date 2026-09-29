@@ -35,8 +35,13 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (29/09/2026): bản v9.2 Premium đã phát hành, CHƯA có kết quả test (v9, v9.1 cũng chưa)
+## Trạng thái (29/09/2026): bản v9.3 Premium đã phát hành, CHƯA có kết quả test (v9, v9.1, v9.2 cũng chưa)
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+v9.3 Premium (MD5 `D3E5A61DB704B975DB5D97ADD35CABC6`, `Dist\HUONG_DAN_TEST_20260929_v9.3_Premium.md`) = v9.2 + CHƯA BẮT
+BẢN QUYỀN (user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"): `LicenseManager.Enforced = false`
+-> IsLicensed luôn true, TrialDaysLeft không đụng registry, StatusText "Premium miễn phí...". Không làm key chung (mã gắn
+mã máy, key chung = lộ khoá bí mật). KHI USER BẢO BẮT BẢN QUYỀN: đặt Enforced = true, build bản mới; cân nhắc đổi tên giá
+trị registry PremiumTrialStart (máy test v9-v9.2 đã ghi ngày dùng thử từ 29/09/2026) để 30 ngày tính từ lúc bật.
 v9.2 Premium (MD5 `A841B41AFBE6346399F2478603D31F4C`, `Dist\HUONG_DAN_TEST_20260929_v9.2_Premium.md`) = v9.1 + sửa ô
 Ký hiệu không đều (ảnh test v8: EXIT "CHỈ LỐI THOÁT NẠN" tỉ lệ ~2.4:1 phóng gần kín ô rộng ~2.3 x chiều cao dòng).
 Kết luận từ ảnh: lề ô "vuông" của v7 (`cell.Borders.X.Margin`) KHÔNG giới hạn AutoFit -> AutoFit co khung bao block vào

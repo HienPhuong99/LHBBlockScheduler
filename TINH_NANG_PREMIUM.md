@@ -2,7 +2,10 @@
 
 Bản v9 Premium thêm 13 tính năng, tham khảo lệnh COUNT của AutoCAD 2022+ (bảng tự cập nhật, báo lỗi đếm), các add-in đếm block trên Autodesk App Store (nhiều bản vẽ, thuộc tính, xuất Excel) và lisp thống kê PCCC của Việt Nam (chiều dài ống, đánh số).
 
-Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím tắt...) vẫn miễn phí. Tính năng Premium dùng thử **30 ngày** từ lần nạp add-in đầu tiên, sau đó cần mã kích hoạt (mục 13).
+Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím tắt...) vẫn miễn phí.
+
+> **Hiện tại (từ v9.3): Premium cũng miễn phí, chưa bật bản quyền** — mọi máy dùng full, không cần mã (`LicenseManager.Enforced = false`).
+> Khi bật bản quyền: tính năng Premium dùng thử **30 ngày**, sau đó cần mã kích hoạt (mục 13).
 
 ## Cách mở
 

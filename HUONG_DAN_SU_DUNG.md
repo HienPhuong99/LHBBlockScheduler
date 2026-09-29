@@ -174,7 +174,7 @@ Bạn sẽ thấy dòng thông báo:
 
 ## ⭐ Tính năng Premium (từ v9)
 
-Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Dùng thử 30 ngày, sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
+Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Từ v9.3 **miễn phí, không cần mã kích hoạt** (chưa bật bản quyền). Khi bật bản quyền: dùng thử 30 ngày, sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
 
 ### Thống kê theo tầng / khu vực (`LHBKHUVUC`)
 1. Vẽ polyline kín bao từng tầng / khu (nên có chữ tên khu bên trong).

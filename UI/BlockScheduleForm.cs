@@ -108,7 +108,7 @@ namespace LHBBlockScheduler.UI
 
         private void BuildUi()
         {
-            Text = "LHB Block Scheduler - Thống kê Block v9.2 Premium";
+            Text = "LHB Block Scheduler - Thống kê Block v9.3 Premium";
             Width = 1280;
             Height = 710;
             StartPosition = FormStartPosition.CenterScreen;
