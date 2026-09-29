@@ -4,8 +4,9 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 - Hướng dẫn sử dụng: [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md)
 - Tính năng Premium (từ v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
-- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.1 Premium — tối ưu tốc độ, gộp thư viện thiết bị cũ vào thư viện block mẫu)
+- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.3 Premium — Premium miễn phí, chưa bật bản quyền)
 - Bản đóng gói (zip): mục **Releases** của repo
+- Review chức năng, đề xuất tính năng, kế hoạch thương mại hoá (29/09/2026): [docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md](docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md)
 
 ## Tính năng chính
 

@@ -37,6 +37,11 @@
 
 ## Trạng thái (29/09/2026): bản v9.3 Premium đã phát hành, CHƯA có kết quả test (v9, v9.1, v9.2 cũng chưa)
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+Review + kế hoạch thương mại hoá (29/09/2026, không sửa mã): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md`. Bản kế tiếp nên là
+v9.4 "ổn định": sửa nhóm P0/P1 mục 3 (ARRAY/MINSERT/XREF không đếm đúng, ảnh ký hiệu cache theo tên block, form modeless khi
+đóng/đổi bản vẽ, LastSelectedObjectIds static, bảng chỉ vào Model Space, ảnh tuỳ chỉnh trỏ %APPDATA%, ghi settings không an
+toàn, Process.Start trên .NET 8). Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0
+(ExcludeAssets=runtime, không cần libs\): 0 lỗi -> dùng được cho CI. AutoCAD 2025/2026 đã lên .NET 10 qua bản cập nhật 08-09/2026.
 v9.3 Premium (MD5 `D3E5A61DB704B975DB5D97ADD35CABC6`, `Dist\HUONG_DAN_TEST_20260929_v9.3_Premium.md`) = v9.2 + CHƯA BẮT
 BẢN QUYỀN (user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"): `LicenseManager.Enforced = false`
 -> IsLicensed luôn true, TrialDaysLeft không đụng registry, StatusText "Premium miễn phí...". Không làm key chung (mã gắn
