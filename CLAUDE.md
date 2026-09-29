@@ -160,3 +160,5 @@ Ctrl+Z sau "Xoá bản thừa"; highlight block lồng qua FullSubentityPath.
 - Báo cáo cuối mỗi lần sửa: (1) lỗi gì + nguyên nhân gốc, (2) sửa file nào, sửa gì, (3) kết quả build,
   (4) hướng dẫn test chính xác trong AutoCAD.
 - Comment code tiếng Việt, tên biến/hàm tiếng Anh.
+- (29/09/2026 theo user) KHÔNG đặt lịch tự kiểm tra (send_later / trigger) và KHÔNG theo dõi PR tự động
+  (subscribe_pr_activity) vì tốn token: tạo PR xong thì báo cáo rồi dừng, user tự nhắn khi cần.
