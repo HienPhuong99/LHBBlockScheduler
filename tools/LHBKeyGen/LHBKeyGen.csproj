@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Công cụ tạo mã kích hoạt LHB Premium. CHỈ người bán dùng, KHÔNG đóng gói kèm add-in. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>LHBKeyGen</AssemblyName>
+    <RootNamespace>LHBKeyGen</RootNamespace>
+  </PropertyGroup>
+</Project>

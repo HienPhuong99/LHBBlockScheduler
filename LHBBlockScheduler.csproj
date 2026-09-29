@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>LHBBlockScheduler</AssemblyName>
+    <RootNamespace>LHBBlockScheduler</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <!--
+      QUAN TRỌNG: sửa đường dẫn dưới đây cho đúng thư mục cài AutoCAD trên máy bạn.
+      Ví dụ: C:\Program Files\Autodesk\AutoCAD 2024\
+      Xem lại HUONG_DAN_BUILD.md để biết cách kiểm tra.
+    -->
+    <AutoCADInstallDir>libs\</AutoCADInstallDir>
+    <AppendPlatformsToOutputPath>false</AppendPlatformsToOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\$(Configuration)\net48\</OutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);LHBLoader\**;tools\**;tests\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Loader.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 3 DLL lõi của AutoCAD .NET API. CopyLocal PHẢI là false, nếu không AutoCAD sẽ báo lỗi
+         version mismatch hoặc crash khi load. -->
+    <Reference Include="AcMgd">
+      <HintPath>$(AutoCADInstallDir)AcMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AutoCADInstallDir)AcDbMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AutoCADInstallDir)AcCoreMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- JSON dùng DataContractJsonSerializer có sẵn trong .NET Framework (Core/JsonHelper.cs).
+         KHÔNG thêm lại System.Text.Json: thiếu binding redirect trong acad.exe -> TypeInitializationException. -->
+    <Reference Include="System.Runtime.Serialization" />
+    <!-- Xuất Excel .xlsx (Premium P9): tự ghi file zip OpenXML, không cần cài Excel -->
+    <Reference Include="System.IO.Compression" />
+    <!-- Ribbon (Premium P11): ảnh nút Ribbon là WPF ImageSource. AdWindows.dll của AutoCAD gọi qua reflection -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <Target Name="BuildLoaderAndRuntimeCopy" AfterTargets="Build">
+    <MSBuild Projects="LHBLoader\LHBLoader.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+    <PropertyGroup>
+      <RuntimeTimestamp>$([System.DateTime]::Now.ToString("yyyyMMdd_HHmmss"))</RuntimeTimestamp>
+      <RuntimeTargetDir>$(AppData)\LHBBlockScheduler\Runtime\$(Configuration)\$(RuntimeTimestamp)</RuntimeTargetDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(RuntimeTargetDir)" />
+    <ItemGroup>
+      <RuntimeFiles Include="$(TargetDir)*.*" Exclude="$(TargetDir)LHBLoader.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(RuntimeFiles)" DestinationFolder="$(RuntimeTargetDir)" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\LHB.lsp" DestinationFolder="$(RuntimeTargetDir)" Condition="Exists('$(MSBuildProjectDirectory)\LHB.lsp')" SkipUnchangedFiles="false" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\PostBuild.ps1&quot; -TargetDir &quot;$(RuntimeTargetDir)&quot; -Configuration &quot;$(Configuration)&quot; -ProjectOutputDir &quot;$(TargetDir.TrimEnd('\'))&quot;" />
+  </Target>
+
+  <Target Name="CleanLoader" AfterTargets="Clean">
+    <MSBuild Projects="LHBLoader\LHBLoader.csproj" Targets="Clean" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
+  </Target>
+</Project>

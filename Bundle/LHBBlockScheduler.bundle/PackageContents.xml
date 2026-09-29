@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApplicationPackage
+    SchemaVersion="1.0"
+    AppVersion="1.0.0"
+    Name="LHB Block Scheduler"
+    Description="Thống kê, gộp nhóm và xuất bảng khối lượng Block cho AutoCAD"
+    ProductType="Application"
+    AppNameSpace="LHBBlockScheduler"
+    Author="">
+  <CompanyDetails Name="" Url="" Email="" />
+  <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R25.1" />
+  <Components Description="LHB Block Scheduler Components">
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R25.1" />
+    <ComponentEntry
+        AppName="LHBLoader"
+        Version="1.0"
+        ModuleName="./Contents/LHBLoader.dll"
+        AppDescription="LHB Block Scheduler Loader"
+        LoadOnAutoCADStartup="true" />
+  </Components>
+</ApplicationPackage>

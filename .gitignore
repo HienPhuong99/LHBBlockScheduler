@@ -1,0 +1,22 @@
+# Build
+bin/
+obj/
+.vs/
+*.user
+
+# File AutoCAD của Autodesk: tự chép từ thư mục cài AutoCAD (xem README)
+libs/*.dll
+
+# Bản đóng gói: đính kèm ở GitHub Releases
+Dist/*.zip
+Dist/LHBBlockScheduler/
+Bundle/**/Contents/
+
+# Khoá bí mật tạo mã kích hoạt: KHÔNG BAO GIỜ đưa lên repo
+*private_key*.xml
+LHB_KEYS/
+
+# Cấu hình công cụ cá nhân, file chẩn đoán
+.claude/
+.antigravity/
+LHBDIAG_*.txt

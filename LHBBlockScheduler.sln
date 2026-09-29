@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LHBBlockScheduler", "LHBBlockScheduler.csproj", "{86789FF4-D23B-4364-BA07-F707273D327A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LHBLoader", "LHBLoader\LHBLoader.csproj", "{D486CE94-C348-4AC9-A6DC-B276AF1FBA95}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{86789FF4-D23B-4364-BA07-F707273D327A}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{86789FF4-D23B-4364-BA07-F707273D327A}.Debug|Any CPU.Build.0 = Debug|x64
+		{86789FF4-D23B-4364-BA07-F707273D327A}.Release|Any CPU.ActiveCfg = Release|x64
+		{86789FF4-D23B-4364-BA07-F707273D327A}.Release|Any CPU.Build.0 = Release|x64
+		{D486CE94-C348-4AC9-A6DC-B276AF1FBA95}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{D486CE94-C348-4AC9-A6DC-B276AF1FBA95}.Debug|Any CPU.Build.0 = Debug|x64
+		{D486CE94-C348-4AC9-A6DC-B276AF1FBA95}.Release|Any CPU.ActiveCfg = Release|x64
+		{D486CE94-C348-4AC9-A6DC-B276AF1FBA95}.Release|Any CPU.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal
