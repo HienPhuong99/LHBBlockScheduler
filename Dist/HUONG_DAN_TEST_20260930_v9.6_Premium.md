@@ -1,7 +1,7 @@
 # Hướng dẫn test LHBBlockScheduler — bản 30/09/2026 (v9.6 Premium — chủng loại block động, tách theo kích thước)
 
 **File cần nhận:** `LHBBlockScheduler_20260930_v9.6_Premium.zip`
-**MD5 DLL đúng:** `@@MD5_V96@@`
+**MD5 DLL đúng:** `5FEEE00BD988C1B1EDE8E98E84A63C89`
 **Máy test:** AutoCAD 2021 (chạy được AutoCAD 2021 – 2024; 2025 trở lên chưa hỗ trợ)
 
 v9.6 = v9.5 (bản quyền v2, key review vẫn dùng được) + sửa theo 3 ảnh ngày 30/09: đầu báo tia chiếu ra chủng loại
@@ -29,7 +29,7 @@ Dùng bản vẽ có ĐẦU BÁO TIA CHIẾU (nhiều cái, kéo dài khác nhau
 
 | # | Thao tác | Kết quả đúng |
 |---|---|---|
-| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD + bản vẽ, kéo thả `LHB.lsp`. Gõ `LHBVERSION` | MD5 = `@@MD5_V96@@`. Tiêu đề form lúc mở: `Thống kê Block v9.6 Premium` |
+| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD + bản vẽ, kéo thả `LHB.lsp`. Gõ `LHBVERSION` | MD5 = `5FEEE00BD988C1B1EDE8E98E84A63C89`. Tiêu đề form lúc mở: `Thống kê Block v9.6 Premium` |
 | 2 | `LHBSCAN`, quét vùng có nhiều đầu báo tia chiếu dài khác nhau (ô **Tách theo kích thước** đang tắt) | ĐẦU BÁO TIA CHIẾU chỉ **1 dòng**, cột **Chủng loại trống**, SL = tổng số tia. Block có Visibility (EXIT 2 HƯỚNG, BỘT ABC 8KG, TỦ 2 CUỘN VÒI) vẫn đúng chủng loại như cũ |
 | 3 | Tích **Tách theo kích thước** (hàng 2, sau "Tách theo chủng loại") | Hiện cột **Kích thước** sau cột Chủng loại. Tia chiếu tách mỗi độ dài 1 dòng (vd `12320`, `15000`), xếp tăng dần; SL cộng lại = SL bước 2. Block không có tham số độ dài: ô Kích thước trống |
 | 4 | Bỏ tích **Tách theo kích thước** | Về như bước 2, cột Kích thước ẩn. Tích lại, tắt / mở form (LHBSCAN lại) → ô tick và cột được nhớ |

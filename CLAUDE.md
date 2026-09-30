@@ -37,7 +37,7 @@
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
 ## Trạng thái (30/09/2026): bản v9.6 Premium (chủng loại block động + tách theo kích thước + LHBKHOPCOT) đã phát hành, CHƯA có kết quả test (v9 – v9.5 cũng chưa)
-v9.6 Premium (MD5 `@@MD5_V96@@`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit @@COMMIT_V96@@) = v9.5 +
+v9.6 Premium (MD5 `5FEEE00BD988C1B1EDE8E98E84A63C89`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit 76ccb1e) = v9.5 +
 yêu cầu user 30/09 (ảnh hộp thoại block mẫu + form + bảng CAD có đầu báo tia chiếu chủng loại "Distance1=12320.3286822983"):
 - Chủng loại block động CHỈ từ Visibility, không có Visibility thì tham số dạng chữ (Lookup...). Tham số SỐ (độ dài Linear /
   Polar / XY, góc, toạ độ Point, lật Flip) không bao giờ làm chủng loại (trước: ghép "Tên=Giá trị" mọi tham số -> mỗi độ dài
