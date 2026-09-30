@@ -6,9 +6,19 @@
 
 ## 📋 Yêu cầu
 
-- ✅ AutoCAD **2021 – 2024** bản đầy đủ 64-bit (AutoCAD LT không chạy được add-in .NET)
+- ✅ AutoCAD **2021 – 2027** bản đầy đủ 64-bit, kể cả AutoCAD MEP / Electrical / Civil 3D cùng đời (AutoCAD LT không chạy
+  được add-in .NET)
 - ✅ Windows 10/11
-- ⚠️ AutoCAD **2025 trở lên** chạy .NET 8/10: bản hiện tại (build .NET Framework 4.8) **chưa chạy được**, sẽ có bản riêng.
+- ℹ️ Từ v9.7 trong zip có 3 bản DLL, `LHB.lsp` tự chọn theo AutoCAD đang mở (không cần cài thêm .NET):
+
+| AutoCAD | .NET | DLL trong thư mục add-in |
+|---|---|---|
+| 2021, 2022, 2023, 2024 | .NET Framework 4.8 | `LHBBlockScheduler.dll` (thư mục gốc) |
+| 2025, 2026 (cả khi đã cập nhật .NET 10) | .NET 8 | `net8\LHBBlockScheduler.dll` |
+| 2027 | .NET 10 | `net10\LHBBlockScheduler.dll` |
+
+> Thư viện block mẫu (`ThuVienMau`), `log.txt`, file `LHBDIAG_*.txt` luôn nằm ở **thư mục gốc** add-in (cạnh `LHB.lsp`),
+> dùng chung cho mọi phiên bản AutoCAD trên máy. Cài đặt, key bản quyền, dùng thử cũng dùng chung.
 
 ---
 
@@ -18,9 +28,11 @@
    Không chạy thẳng trong file zip.
 2. Mở AutoCAD, mở 1 bản vẽ bất kỳ.
 3. **Kéo thả** file `LHB.lsp` (trong thư mục vừa giải nén) vào vùng vẽ.
-   - LISP tự tìm và nạp đúng `LHBBlockScheduler.dll` đi kèm (kiểm tra MD5 trong `build-info.txt`, không nạp nhầm bản cũ).
+   - LISP tự tìm và nạp đúng `LHBBlockScheduler.dll` đi kèm (kiểm tra MD5 trong `build-info.txt`, không nạp nhầm bản cũ),
+     đúng bản cho AutoCAD đang mở (bảng trên). Giải nén **đủ** zip, giữ nguyên thư mục `net8`, `net10`.
    - Có hộp thoại bảo mật → chọn **Load** / **Always Load**.
-4. Dòng lệnh hiện `[LHB] v9.x Premium ...` là xong. Gõ `LHBSCAN` để thống kê, `LHBHELP` xem danh sách lệnh.
+4. Dòng lệnh hiện `[LHB] Đã nạp bản cho AutoCAD ...` và `[LHB] v9.x Premium ...` là xong. Gõ `LHBSCAN` để thống kê,
+   `LHBHELP` xem danh sách lệnh.
 
 ### Tự nạp mỗi lần mở AutoCAD
 
@@ -36,7 +48,8 @@
 ## 🔧 Cách 2: Nạp thủ công bằng NETLOAD
 
 1. Gõ `NETLOAD` → Enter.
-2. Chọn file `LHBBlockScheduler.dll` trong thư mục đã giải nén → **Open**.
+2. Chọn file `LHBBlockScheduler.dll` **đúng bản** trong thư mục đã giải nén (AutoCAD 2021 – 2024: thư mục gốc; 2025 – 2026:
+   thư mục `net8`; 2027: thư mục `net10`) → **Open**. Chọn nhầm bản thì dòng lệnh báo `[LHB CẢNH BÁO] DLL này là bản cho ...`.
 3. Có hộp thoại bảo mật → **Load** / **Always Load**.
 
 Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suite).
@@ -233,7 +246,7 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 2. Giải nén bản mới ra **thư mục mới** (giữ thư mục cũ tới khi bản mới chạy tốt). Thư viện block mẫu (`ThuVienMau`) tự
    chép sang thư mục mới từ bản dự phòng trong `%APPDATA%\LHBBlockScheduler\ThuVienMau`.
 3. Mở AutoCAD, kéo thả `LHB.lsp` của bản mới (Startup Suite: bỏ `LHB.lsp` cũ, thêm `LHB.lsp` mới).
-4. Gõ `LHBVERSION` kiểm tra MD5 đúng với file hướng dẫn test của bản đó.
+4. Gõ `LHBVERSION` kiểm tra MD5 đúng với file hướng dẫn test của bản đó (mỗi dòng AutoCAD 1 MD5, xem dòng "bản DLL cho").
 
 > ⚠️ **Quan trọng:** AutoCAD giữ DLL đã nạp tới khi tắt hẳn chương trình — không chép đè DLL khi AutoCAD đang mở.
 

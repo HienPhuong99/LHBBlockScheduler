@@ -30,7 +30,7 @@ namespace LHBBlockScheduler.Models
     }
 
     /// <summary>
-    /// Bộ block mẫu, lưu cạnh add-in: &lt;thư mục DLL&gt;\ThuVienMau\&lt;tên&gt;.json (thông tin) + &lt;tên&gt;.dwg (định nghĩa block).
+    /// Bộ block mẫu, lưu cạnh add-in: &lt;thư mục gốc add-in&gt;\ThuVienMau\&lt;tên&gt;.json (thông tin) + &lt;tên&gt;.dwg (định nghĩa block).
     /// Thứ tự Entries = thứ tự dòng trên form thống kê và bảng xuất.
     /// </summary>
     public class TemplateLibrary

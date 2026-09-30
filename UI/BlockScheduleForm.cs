@@ -139,6 +139,7 @@ namespace LHBBlockScheduler.UI
 
         private void BuildUi()
         {
+            UiKit.KeepFrameworkFont(this);
             Text = $"LHB Block Scheduler - Thống kê Block {MyApp.DisplayVersion} - {Path.GetFileName(_doc?.Name ?? "")}";
             Width = 1280;
             Height = 710;
@@ -1412,6 +1413,7 @@ namespace LHBBlockScheduler.UI
                 Text = "Đang tạo ảnh thu nhỏ (GraphicsSystem)..."
             })
             {
+                UiKit.KeepFrameworkFont(progress);
                 var bar = new ProgressBar { Left = 15, Top = 15, Width = 295, Maximum = itemsNeedingThumb.Count };
                 var lbl = new Label { Left = 15, Top = 45, Width = 295, Text = "" };
                 progress.Controls.Add(bar);

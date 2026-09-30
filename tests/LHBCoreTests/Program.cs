@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -10,7 +11,8 @@ namespace LHBCoreTests
 {
     /// <summary>
     /// Kiểm thử v9.6 (không cần AutoCAD): chủng loại không chứa tham số số của block động, kích thước "Tách theo kích thước",
-    /// block mẫu lưu từ bản cũ (chủng loại "Distance1=47116.93") vẫn khớp. Thoát 0 = đạt hết.
+    /// block mẫu lưu từ bản cũ (chủng loại "Distance1=47116.93") vẫn khớp. v9.7: thư mục gốc add-in khi DLL nằm thư mục con
+    /// net8 / net10 (AutoCAD 2025+). Thoát 0 = đạt hết.
     /// </summary>
     internal static class Program
     {
@@ -74,6 +76,23 @@ namespace LHBCoreTests
             Check(DynamicParamText.MatchVariant(new[] { "bột abc 8kg" }, "BỘT ABC 8KG", null) == 0, "không phân biệt hoa thường");
             Check(DynamicParamText.MatchVariant(new[] { "Lookup1=Loại A - Distance1=5" }, "Lookup1=Loại A", dist) == 0, "mẫu cũ Lookup + độ dài khớp chủng loại mới");
             Check(DynamicParamText.MatchVariant(new string[0], "", dist) == -1, "không có mẫu cùng tên -> -1");
+
+            Section("Thư mục gốc add-in theo bản DLL (v9.7, AddinPaths.ResolveRoot)");
+            string root = Path.Combine(Path.GetTempPath(), "LHBBlockScheduler");
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Path.Combine(root, "LHB.lsp"), Path.Combine(root, "LHBBlockScheduler.dll"),
+            };
+            Func<string, bool> exists = files.Contains;
+            Eq(AddinPaths.ResolveRoot(root, exists), root, "bản 2021 - 2024 (thư mục gốc) -> chính thư mục đó");
+            Eq(AddinPaths.ResolveRoot(Path.Combine(root, "net8"), exists), root, "bản 2025 - 2026 (net8) -> thư mục gốc (ThuVienMau, log, LHBDIAG dùng chung)");
+            Eq(AddinPaths.ResolveRoot(Path.Combine(root, "NET10") + Path.DirectorySeparatorChar, exists), root, "net10 (chữ hoa, có dấu phân cách cuối) -> thư mục gốc");
+            string build = Path.Combine(Path.GetTempPath(), "repo", "bin", "Release", "net8");
+            Eq(AddinPaths.ResolveRoot(build, exists), build, "thư mục build bin/Release/net8 (thư mục cha không phải add-in) -> giữ nguyên");
+            Eq(AddinPaths.ResolveRoot(Path.Combine(root, "net9"), exists), Path.Combine(root, "net9"), "thư mục con lạ (net9) -> giữ nguyên");
+            Check(AddinPaths.ResolveRoot(null, exists) == null, "không biết thư mục DLL -> null");
+            var onlyDll = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Path.Combine(root, "LHBBlockScheduler.dll") };
+            Eq(AddinPaths.ResolveRoot(Path.Combine(root, "net8"), onlyDll.Contains), root, "thư mục gốc có DLL nhưng mất LHB.lsp vẫn nhận");
 
             Console.WriteLine();
             Console.WriteLine(_fail == 0 ? $"ĐẠT HẾT: {_pass} kiểm tra" : $"LỖI: {_fail} / {_pass + _fail} kiểm tra");

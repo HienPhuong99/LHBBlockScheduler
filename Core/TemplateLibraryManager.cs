@@ -12,7 +12,7 @@ namespace LHBBlockScheduler.Core
 {
     /// <summary>
     /// Thư viện block mẫu (yêu cầu 29/09/2026, giống hộp thoại "Thông tin Block mẫu" trong video mẫu):
-    ///  - Lưu CẠNH ADD-IN: &lt;thư mục DLL&gt;\ThuVienMau\&lt;bộ&gt;.json (tên thống kê, đơn vị, ảnh ký hiệu base64)
+    ///  - Lưu CẠNH ADD-IN: &lt;thư mục gốc add-in&gt;\ThuVienMau\&lt;bộ&gt;.json (tên thống kê, đơn vị, ảnh ký hiệu base64)
     ///    + &lt;bộ&gt;.dwg (định nghĩa block). Mang cả thư mục add-in sang máy khác là có đủ block mẫu.
     ///  - Bản sao dự phòng ở %APPDATA%\LHBBlockScheduler\ThuVienMau: giải nén bản add-in mới sang thư mục khác
     ///    thì tự chép thư viện từ bản dự phòng sang, không mất block mẫu.
@@ -27,14 +27,15 @@ namespace LHBBlockScheduler.Core
 
         public static string BackupFolder => Path.Combine(Logger.AppDataFolder, FolderName);
 
-        /// <summary>Thư mục thư viện đang dùng (cạnh DLL nếu ghi được, không thì APPDATA).</summary>
+        /// <summary>Thư mục thư viện đang dùng (thư mục gốc add-in nếu ghi được, không thì APPDATA).</summary>
         public static string Folder
         {
             get
             {
                 if (_folder != null) return _folder;
-                string dllDir = Logger.DllFolder;
-                string candidate = string.IsNullOrEmpty(dllDir) ? null : Path.Combine(dllDir, FolderName);
+                // v9.7: thư mục gốc add-in (bản AutoCAD 2025+ ở thư mục con net8 / net10 dùng chung thư viện với bản 2021 - 2024)
+                string addinDir = Logger.AddinRootFolder;
+                string candidate = string.IsNullOrEmpty(addinDir) ? null : Path.Combine(addinDir, FolderName);
                 if (candidate != null && CanWrite(candidate))
                 {
                     _folder = candidate;
@@ -43,7 +44,7 @@ namespace LHBBlockScheduler.Core
                 {
                     _folder = BackupFolder;
                     Directory.CreateDirectory(_folder);
-                    Logger.Warn($"[TemplateLibrary] Không ghi được thư mục cạnh DLL '{candidate}' -> lưu thư viện mẫu ở '{_folder}'");
+                    Logger.Warn($"[TemplateLibrary] Không ghi được thư mục cạnh add-in '{candidate}' -> lưu thư viện mẫu ở '{_folder}'");
                 }
                 MigrateFromBackupIfEmpty();
                 Logger.Log($"[TemplateLibrary] Thư mục thư viện block mẫu: '{_folder}'");

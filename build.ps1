@@ -13,7 +13,21 @@ if (-not (Test-Path $dotnet)) {
 }
 
 Write-Host "1. Building Release..." -ForegroundColor Cyan
-& $dotnet build -c Release
+# v9.7: 3 ban DLL - AutoCAD 2021-2024 (net48, thu muc goc), 2025-2026 (net8), 2027 (net10). Ban 2025+ can .NET 10 SDK;
+# may chua co .NET 10 SDK -> chi build ban 2021-2024, LHB.lsp bao "goi khong co ban" khi mo bang AutoCAD 2025+.
+$hasSdk10 = $false
+foreach ($line in (& $dotnet --list-sdks 2>$null)) {
+    if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { $hasSdk10 = $true }
+}
+$buildArgs = @("build", "-c", "Release")
+if ($hasSdk10) {
+    $buildArgs += "-p:LhbAllTargets=true"
+    Write-Host "   Build 3 ban: AutoCAD 2021-2024 (net48), 2025-2026 (net8), 2027 (net10)" -ForegroundColor Gray
+} else {
+    Write-Host "   CANH BAO: may chua co .NET 10 SDK -> chi build ban AutoCAD 2021-2024 (net48)." -ForegroundColor Yellow
+    Write-Host "   Cai .NET 10 SDK (https://dotnet.microsoft.com/download) de build them ban AutoCAD 2025-2027." -ForegroundColor Yellow
+}
+& $dotnet @buildArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED - stopping." -ForegroundColor Red
     exit 1
@@ -45,6 +59,25 @@ Copy-Item ".\bin\Release\net48\*" -Destination $distPath -Force -Recurse
 Remove-Item "$distPath\LHBLoader.*" -Force -ErrorAction SilentlyContinue
 if (Test-Path ".\LHB.lsp") {
     Copy-Item ".\LHB.lsp" -Destination $distPath -Force
+}
+
+# v9.7: ban AutoCAD 2025-2026 / 2027 vao thu muc con net8 / net10 cua Dist, moi thu muc 1 build-info.txt
+# (LHB.lsp chon DLL theo ACADVER). Chi lay ban vua build lan nay (bo DLL cu con sot trong bin).
+$extraMd5 = @{}
+foreach ($t in @("net8", "net10")) {
+    $src = ".\bin\Release\$t"
+    if ($hasSdk10 -and (Test-Path "$src\LHBBlockScheduler.dll")) {
+        $dst = "$distPath\$t"
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item "$src\*" -Destination $dst -Force -Recurse
+        $tDll = "$dst\LHBBlockScheduler.dll"
+        $tMd5 = (Get-FileHash -Path $tDll -Algorithm MD5).Hash.ToUpperInvariant()
+        $tSize = (Get-Item $tDll).Length
+        $tTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        [System.IO.File]::WriteAllText("$dst\build-info.txt", "Configuration: Release`r`nBuildTime: $tTime`r`nDllSize: $tSize`r`nMD5: $tMd5", [System.Text.Encoding]::UTF8)
+        $extraMd5[$t] = $tMd5
+        Write-Host "   Ban $t : MD5 $tMd5" -ForegroundColor Green
+    }
 }
 
 # Dam bao build-info.txt co mat trong Dist va Bundle/Contents
@@ -81,6 +114,14 @@ if ($md5Line) {
             if ($text.Contains("@@LHB_BUILD_MD5@@")) {
                 $text = $text.Replace("@@LHB_BUILD_MD5@@", $md5)
                 Write-Host "   Da ghi MD5 $md5 vao $lsp" -ForegroundColor Green
+            }
+            # v9.7: MD5 ban net8 / net10 (chu mau "@@LHB_BUILD_MD5@@" khong nam trong 2 chu mau nay -> thay rieng duoc)
+            foreach ($t in $extraMd5.Keys) {
+                $ph = "@@LHB_BUILD_MD5_" + $t.ToUpperInvariant() + "@@"
+                if ($text.Contains($ph)) {
+                    $text = $text.Replace($ph, $extraMd5[$t])
+                    Write-Host "   Da ghi MD5 ban $t vao $lsp" -ForegroundColor Green
+                }
             }
             if ($version -and $text.Contains("@@LHB_VERSION@@")) {
                 # Chu "v9.4 Premium" chi co ky tu ASCII -> thay theo byte Latin1 van giu nguyen UTF-8 cua file

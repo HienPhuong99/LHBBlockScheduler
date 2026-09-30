@@ -48,6 +48,7 @@ namespace LHBBlockScheduler.UI
 
         private void BuildUi()
         {
+            UiKit.KeepFrameworkFont(this);
             Text = "Thông tin block mẫu";
             Width = 1060;
             Height = 600;

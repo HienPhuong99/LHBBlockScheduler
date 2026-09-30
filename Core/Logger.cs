@@ -10,7 +10,8 @@ namespace LHBBlockScheduler.Core
     /// <summary>
     /// Ghi log song song ra 2 nơi:
     /// 1. %APPDATA%\LHBBlockScheduler\log.txt (mặc định cho máy cài đặt)
-    /// 2. <Thư mục chứa DLL>\log.txt (thuận tiện mang thư mục sang máy khác test, zip lại có luôn log)
+    /// 2. <Thư mục gốc add-in>\log.txt (thuận tiện mang thư mục sang máy khác test, zip lại có luôn log; v9.7: bản
+    ///    AutoCAD 2025+ ở thư mục con net8 / net10 cũng ghi vào thư mục gốc)
     /// v9.1: giữ file mở trong lúc ghi dồn dập (mỗi dòng vẫn flush ngay, AutoCAD crash không mất log), tự đóng file
     /// sau 1 giây không ghi để Notepad / nén zip đọc được. Trước đây mỗi dòng mở + đóng 2 file -> xuất bảng
     /// vài trăm dòng log chậm thấy rõ. File log quá 5 MB thì đổi tên thành log.old.txt lúc nạp add-in.
@@ -24,7 +25,7 @@ namespace LHBBlockScheduler.Core
         private static StreamWriter _appWriter, _localWriter;
         private static Timer _closeTimer;
         private static bool _initialized, _localDisabled;
-        private static string _dllFolder, _localLogPath;
+        private static string _dllFolder, _addinRoot, _localLogPath;
 
         public static string AppDataFolder =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -47,12 +48,28 @@ namespace LHBBlockScheduler.Core
             }
         }
 
+        /// <summary>
+        /// v9.7: thư mục gốc add-in (thư mục có LHB.lsp). Bản AutoCAD 2025+ nằm thư mục con net8 / net10 của thư mục gốc ->
+        /// thư viện block mẫu (ThuVienMau), log.txt, LHBDIAG dùng chung thư mục gốc cho mọi phiên bản AutoCAD trên máy.
+        /// Bản AutoCAD 2021 - 2024 nằm ngay thư mục gốc -> = DllFolder như trước. Quy tắc: AddinPaths.ResolveRoot.
+        /// </summary>
+        public static string AddinRootFolder
+        {
+            get
+            {
+                if (_addinRoot != null) return _addinRoot;
+                try { _addinRoot = AddinPaths.ResolveRoot(DllFolder, File.Exists); }
+                catch { _addinRoot = DllFolder; }
+                return _addinRoot;
+            }
+        }
+
         public static string LocalLogFilePath
         {
             get
             {
                 if (_localLogPath != null) return _localLogPath;
-                string dir = DllFolder;
+                string dir = AddinRootFolder;
                 _localLogPath = !string.IsNullOrEmpty(dir) ? Path.Combine(dir, "log.txt") : null;
                 return _localLogPath;
             }
@@ -128,7 +145,7 @@ namespace LHBBlockScheduler.Core
                     catch { }
                 }
 
-                // 2. Ghi song song vào <Thư mục chứa DLL>\log.txt
+                // 2. Ghi song song vào <thư mục gốc add-in>\log.txt
                 if (!_localDisabled)
                 {
                     try

@@ -35,6 +35,7 @@ namespace LHBBlockScheduler.UI
 
         private void BuildUi()
         {
+            UiKit.KeepFrameworkFont(this);
             Text = "Block trùng / che lấp nhau";
             Width = 820;
             Height = 420;

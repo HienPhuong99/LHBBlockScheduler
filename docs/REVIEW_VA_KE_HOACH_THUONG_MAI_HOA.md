@@ -90,6 +90,8 @@
 > **Cập nhật 29/09/2026 — v9.4 Premium đã sửa:** A1–A6, B1–B3, C1–C3, D3, D5, E1 (hướng dẫn cài đặt + ghi chú bundle, chưa có installer), E5, `BlockReplacer` O(n²), quét chọn chỉ lấy INSERT. Số dòng trong các liên kết bên dưới là của v9.3. D2 một phần (SeriesMax R24.3, ghi rõ bundle máy dev). Chưa làm: A7, B4 (một phần: highlight bỏ ObjectId bản vẽ khác), C4, C5, D1, D2 (phần còn lại), D4, D6, E2–E4, F1–F6.
 >
 > **Cập nhật 30/09/2026 — v9.5 Premium (bản quyền v2):** F1 (bật `Enforced` cùng hệ thống mới), F2 (ECDSA P-256), F3 (UUID bo mạch chủ SMBIOS, dự phòng `MachineGuid`), F4 (dùng thử 2 nơi + HMAC + phát hiện lùi đồng hồ; vẫn reset được nếu xoá cả 2 nơi), F6 phần offline (gói tính năng, loại key, serial + thu hồi, nhiều khoá ký, LHBKeyGen v2 + sổ key + GitHub Actions). Chưa làm: F5 (obfuscate, ký số), F6 phần online (máy chủ, thanh toán tự cấp key, khách tự chuyển máy). Chi tiết: [`BAN_QUYEN_VA_CAP_KEY.md`](BAN_QUYEN_VA_CAP_KEY.md).
+>
+> **Cập nhật 30/09/2026 — v9.7 Premium (AutoCAD 2021 – 2027):** D1 (csproj đa đích `net48` / `net8.0-windows` / `net10.0-windows`, zip có thư mục `net8`, `net10`, `LHB.lsp` chọn DLL theo `ACADVER` và kiểm MD5 từng bản; font WinForms .NET 8 giữ như .NET Framework), D4 (API nội bộ gọi qua hàm riêng, thiếu API chỉ hỏng phím tắt). Chưa làm: D2 (bundle `ApplicationPlugins` phát hành 3 `ComponentEntry` — làm cùng installer E2), D6.
 
 ### 3.1 Độ chính xác số lượng (quan trọng nhất)
 
