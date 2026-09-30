@@ -7,9 +7,9 @@
 
 | AutoCAD | File trong thư mục `LHBBlockScheduler` | MD5 |
 |---|---|---|
-| 2021 – 2024 | `LHBBlockScheduler.dll` | `@@MD5_NET48@@` |
-| 2025 – 2026 | `net8\LHBBlockScheduler.dll` | `@@MD5_NET8@@` |
-| 2027 | `net10\LHBBlockScheduler.dll` | `@@MD5_NET10@@` |
+| 2021 – 2024 | `LHBBlockScheduler.dll` | `401475A3C654362B5D0CF9EFEE757BFA` |
+| 2025 – 2026 | `net8\LHBBlockScheduler.dll` | `695E16FFB32622ED3743562E2E9E038B` |
+| 2027 | `net10\LHBBlockScheduler.dll` | `5A55D24AB9F341328203A2BC868F42E0` |
 
 v9.7 = v9.6 (chủng loại block động, tách theo kích thước, `LHBKHOPCOT`) + chạy được AutoCAD 2025 – 2027. Tính năng và bản
 quyền không đổi: máy đã kích hoạt key review vẫn đang kích hoạt; cùng 1 máy thì AutoCAD 2021 và 2025 dùng chung key,

@@ -46,8 +46,8 @@
    `C:\Users\vsp\Downloads\tool\`). User chỉ mở file kiểm tra: báo cáo KHÔNG giao việc GitHub cho user (tạo Release, gộp PR...).
 
 ## Trạng thái (30/09/2026): bản v9.7 Premium (chạy AutoCAD 2021 – 2027) đã phát hành, CHƯA có kết quả test (v9 – v9.6 cũng chưa)
-v9.7 Premium (MD5 net48 `@@MD5_NET48@@`, net8 `@@MD5_NET8@@`, net10 `@@MD5_NET10@@`,
-`Dist\HUONG_DAN_TEST_20260930_v9.7_Premium.md`, build cloud tại commit @@COMMIT@@) = v9.6 + đa phiên bản AutoCAD (review D1; user 30/09
+v9.7 Premium (MD5 net48 `401475A3C654362B5D0CF9EFEE757BFA`, net8 `695E16FFB32622ED3743562E2E9E038B`, net10 `5A55D24AB9F341328203A2BC868F42E0`,
+`Dist\HUONG_DAN_TEST_20260930_v9.7_Premium.md`, build cloud tại commit 6001c3f) = v9.6 + đa phiên bản AutoCAD (review D1; user 30/09
 "Tiếp tục nhé bạn" -> tự chọn bước tiếp theo của lộ trình: đồng nghiệp dùng key review có thể đang chạy AutoCAD 2025+):
 - csproj đa đích (xem Ngữ cảnh kỹ thuật). `[assembly: SupportedOSPlatform("windows")]` trong `#if NET` (GenerateAssemblyInfo=false
   nên SDK không tự ghi, thiếu thì CA1416 báo ~6000 cảnh báo). Build 3 đích 0 lỗi 0 cảnh báo, không chép DLL AutoCAD ra output.
