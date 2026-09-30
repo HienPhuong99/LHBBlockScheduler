@@ -29,12 +29,17 @@
 3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium" (từ v9.4 chỉ sửa
    `MyApp.Version` trong Properties/AssemblyInfo.cs),
    `Dist\LHBBlockScheduler_<yyyyMMdd>_vN_Premium.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN_Premium.md` (vN có thể là v9.1).
-   Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md.
+   Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md + (từ v9.6) hướng dẫn test của bản
+   (ghi MD5 vào hướng dẫn test TRƯỚC khi nén; phiên cloud: `python3 tools/pack_cloud.py stage` rồi `zip <yyyyMMdd>`).
    (v8 trở về trước: `Dist\LHBBlockScheduler_<yyyyMMdd>_vN.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN.md`)
    (theo mẫu các bản trước: bản này sửa gì, MD5, bảng bước test, cần gửi về gì), gửi cả 2 file cho user.
 4. (Đổi 29/09/2026 theo user) KHÔNG gửi demo, KHÔNG hỏi ý giữa chừng: tự chọn phương án tốt nhất, làm xong trọn
-   (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
-5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
+   (build, đóng gói, tài liệu, push GitHub) rồi báo cáo 1 lần.
+5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip commit + push luôn trong `Dist\`
+   (từ 30/09/2026, `.gitignore` không chặn `Dist/*.zip` nữa; v9 - v9.4 ở Releases). Máy dev có `gh` thì tạo thêm Release.
+6. (30/09/2026 theo user: "từ lần sau cứ push code và nén luôn nha, tôi chỉ việc vô file kiểm tra thôi") Mỗi bản TỰ làm hết:
+   build -> nén zip -> push code + zip -> gửi file zip cho user (phiên cloud: SendUserFile; máy dev: chép vào
+   `C:\Users\vsp\Downloads\tool\`). User chỉ mở file kiểm tra: báo cáo KHÔNG giao việc GitHub cho user (tạo Release, gộp PR...).
 
 ## Trạng thái (30/09/2026): bản v9.6 Premium (chủng loại block động + tách theo kích thước + LHBKHOPCOT) đã phát hành, CHƯA có kết quả test (v9 – v9.5 cũng chưa)
 v9.6 Premium (MD5 `5FEEE00BD988C1B1EDE8E98E84A63C89`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit 76ccb1e) = v9.5 +
@@ -67,7 +72,7 @@ thì MD5 đổi -> sửa MD5 trong `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md
 v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.
 Zip phát hành build lại trên máy dev bằng libs\ -> MD5 DLL `5F5B53084349716CB7D9A6FF4054DE30` (bản build cloud MD5
 `DA84C6DB97E8BFAFD4437EE1A1302C6C` không phát hành). Zip + hướng dẫn test cũng chép vào `C:\Users\vsp\Downloads\tool\` như các bản cũ.
-Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip: `Dist\` trên GitHub (từ v9.5), v9 - v9.4 ở Releases. libs\*.dll KHÔNG đưa lên repo.
 Review + kế hoạch thương mại hoá (29/09/2026): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md` (mã lỗi A1..F6 dùng trong commit/test).
 Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0 (ExcludeAssets=runtime, không cần
 libs\): 0 lỗi -> dùng được cho CI. AutoCAD 2025/2026 đã lên .NET 10 qua bản cập nhật 08-09/2026.
@@ -75,8 +80,9 @@ Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/
 (`autocad.net`, `autocad.net.core`, `autocad.net.model`) vào 1 thư mục, `dotnet build -c Release -p:AutoCADInstallDir=<thư mục>/
 -p:TargetFrameworkRootPath=<nuget>/microsoft.netframework.referenceassemblies.net48/1.0.3/build/
 -p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
-PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
-tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
+PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói bằng
+`tools/pack_cloud.py` (đúng các bước build.ps1: Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong
+LHB.lsp; bước zip kiểm hướng dẫn test đã ghi đúng MD5).
 MD5 DLL phụ thuộc cả commit đang đứng: SDK .NET 8 nhúng SourceLink (URL + mã commit) vào PDB -> mã PDB nằm trong DLL. Build bản
 phát hành từ commit đã chốt mã, rồi commit riêng phần cập nhật MD5 trong tài liệu (v9.5: DLL build tại commit 795f1a1).
 Bản quyền + cấp key (30/09/2026): `docs/BAN_QUYEN_VA_CAP_KEY.md` (thiết kế, mức an toàn, quy trình cấp / thu hồi / xoay khoá).

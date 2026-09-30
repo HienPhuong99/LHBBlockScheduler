@@ -5,7 +5,7 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 - Hướng dẫn sử dụng: [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md)
 - Tính năng Premium (từ v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
 - Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.6 Premium — chủng loại block động không còn "Distance1=...", tách theo kích thước + cột Kích thước, lệnh `LHBKHOPCOT` khớp cột bảng như Excel; v9.5 bản quyền v2; v9.4 "ổn định" sửa đếm ARRAY / MINSERT / XREF)
-- Bản đóng gói (zip): mục **Releases** của repo
+- Bản đóng gói (zip, có sẵn hướng dẫn test bên trong): thư mục [Dist](Dist) (từ v9.5); v9 – v9.4: mục **Releases**
 - Review chức năng, đề xuất tính năng, kế hoạch thương mại hoá (29/09/2026): [docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md](docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md)
 - Bản quyền v2, mức an toàn, cấp và quản lý key (30/09/2026): [docs/BAN_QUYEN_VA_CAP_KEY.md](docs/BAN_QUYEN_VA_CAP_KEY.md)
 
@@ -20,7 +20,7 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 ## Cài đặt (người dùng)
 
-1. Tải zip ở mục Releases, giải nén vào 1 thư mục.
+1. Tải zip bản mới nhất trong thư mục `Dist`, giải nén vào 1 thư mục.
 2. Mở AutoCAD 2021 – 2024, kéo thả file `LHB.lsp` vào bản vẽ (AutoCAD 2025+ chạy .NET 8/10, chưa hỗ trợ).
 3. Gõ `LHBSCAN` hoặc dùng tab Ribbon **LHB Premium**.
 

@@ -1,6 +1,6 @@
 # Hướng dẫn test LHBBlockScheduler — bản 30/09/2026 (v9.6 Premium — chủng loại block động, tách theo kích thước)
 
-**File cần nhận:** `LHBBlockScheduler_20260930_v9.6_Premium.zip`
+**File cần nhận:** `LHBBlockScheduler_20260930_v9.6_Premium.zip` (trong zip có sẵn file hướng dẫn này; zip cũng nằm ở thư mục `Dist` trên GitHub)
 **MD5 DLL đúng:** `5FEEE00BD988C1B1EDE8E98E84A63C89`
 **Máy test:** AutoCAD 2021 (chạy được AutoCAD 2021 – 2024; 2025 trở lên chưa hỗ trợ)
 
