@@ -247,22 +247,43 @@ namespace LHBBlockScheduler.Core
         /// <summary>
         /// Block mẫu khớp: cùng tên block; ưu tiên cùng chủng loại, sau đó mẫu không ghi chủng loại (mọi chủng loại).
         /// v9.4: block trong XREF tên "XREF|TÊN" -> không khớp tên đầy đủ thì thử lại với "TÊN".
+        /// v9.6: numericNames = tên tham số số của block động không có Visibility (DynamicInfo.LegacyNames): block mẫu lưu
+        /// từ bản cũ có chủng loại "Distance1=47116.93" được so như chưa ghi chủng loại (khớp mọi độ dài).
         /// </summary>
-        public static TemplateEntry Match(TemplateLibrary lib, string blockName, string visibility)
+        public static TemplateEntry Match(TemplateLibrary lib, string blockName, string visibility, ICollection<string> numericNames = null)
         {
             if (lib?.Entries == null || string.IsNullOrEmpty(blockName)) return null;
-            var e = MatchName(lib, blockName, visibility);
+            var e = MatchName(lib, blockName, visibility, numericNames);
             if (e != null) return e;
             string bare = StripXrefPrefix(blockName);
-            return bare.Length != blockName.Length ? MatchName(lib, bare, visibility) : null;
+            return bare.Length != blockName.Length ? MatchName(lib, bare, visibility, numericNames) : null;
         }
 
-        private static TemplateEntry MatchName(TemplateLibrary lib, string blockName, string visibility)
+        private static TemplateEntry MatchName(TemplateLibrary lib, string blockName, string visibility, ICollection<string> numericNames)
         {
             var sameName = lib.Entries.Where(e => string.Equals(e.BlockName, blockName, StringComparison.OrdinalIgnoreCase)).ToList();
-            return sameName.FirstOrDefault(e => !string.IsNullOrEmpty(e.VisibilityState) &&
-                                                string.Equals(e.VisibilityState, visibility ?? "", StringComparison.OrdinalIgnoreCase))
-                   ?? sameName.FirstOrDefault(e => string.IsNullOrEmpty(e.VisibilityState));
+            int i = DynamicParamText.MatchVariant(sameName.Select(e => e.VisibilityState).ToList(), visibility, numericNames);
+            return i >= 0 ? sameName[i] : null;
+        }
+
+        /// <summary>
+        /// Chuẩn hoá chủng loại lưu kiểu cũ của các block mẫu tên blockName (v9.6, xem DynamicParamText.StripNumericParts).
+        /// Chỉ gọi khi block KHÔNG có Visibility (chủng loại cũ chỉ ghép tham số lúc đó). Trả số block mẫu đã sửa.
+        /// </summary>
+        public static int NormalizeLegacyVariants(TemplateLibrary lib, string blockName, ICollection<string> numericNames)
+        {
+            if (lib?.Entries == null || numericNames == null || numericNames.Count == 0) return 0;
+            int changed = 0;
+            foreach (var e in lib.Entries.Where(x => string.Equals(x.BlockName, blockName, StringComparison.OrdinalIgnoreCase)))
+            {
+                string fixedVariant = DynamicParamText.StripNumericParts(e.VisibilityState, numericNames);
+                if (fixedVariant == (e.VisibilityState ?? "")) continue;
+                Logger.Log($"[TemplateLibrary] Bộ '{lib.Name}': block mẫu '{e.BlockName}' chủng loại cũ '{e.VisibilityState}' -> '{fixedVariant}' " +
+                           "(tham số độ dài / góc / toạ độ không làm chủng loại từ v9.6)");
+                e.VisibilityState = fixedVariant;
+                changed++;
+            }
+            return changed;
         }
 
         /// <summary>
@@ -289,7 +310,7 @@ namespace LHBBlockScheduler.Core
             var removed = new List<string>();
             foreach (var item in items)
             {
-                var e = Match(lib, item.BlockName, item.VisibilityState);
+                var e = Match(lib, item.BlockName, item.VisibilityState, item.NumericParamNames);
                 if (e != null)
                 {
                     item.DisplayName = string.IsNullOrWhiteSpace(e.DisplayName) ? item.BlockName : e.DisplayName;
@@ -563,7 +584,8 @@ namespace LHBBlockScheduler.Core
         private bool IsTemplate(BlockReference br, string name)
         {
             if (!_names.Contains(name) && !_names.Contains(TemplateLibraryManager.StripXrefPrefix(name))) return false;
-            return TemplateLibraryManager.Match(_lib, name, BlockExtractor.ReadVisibility(br, name)) != null;
+            var dyn = BlockExtractor.ReadDynamicInfo(br, name);
+            return TemplateLibraryManager.Match(_lib, name, dyn.Variant, dyn.LegacyNames) != null;
         }
 
         /// <summary>Định nghĩa block (BTR của instance) có block mẫu ở bất kỳ tầng nào - nhớ theo BTR.</summary>

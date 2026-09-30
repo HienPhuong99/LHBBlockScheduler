@@ -94,6 +94,8 @@ namespace LHBBlockScheduler.UI
                 var options = ExtractionOptions.FromSettings(s, _chkOnlyTemplate.Checked && tpl.Entries.Count > 0 ? tpl : null);
                 options.SplitByVisibility = _chkSplitVis.Checked;
                 options.SplitByLayer = false;
+                // v9.6: bảng nhiều bản vẽ gom theo tên + chủng loại, không có cột Kích thước -> không tách theo kích thước
+                options.SplitBySize = false;
                 options.SplitAttributeKeys = new List<string>();
                 Logger.Log($"[MultiDrawingDialog] Thống kê {files.Count} file{(_chkCurrent.Checked ? " + bản vẽ đang mở" : "")} [{options}]");
                 _rows = MultiDrawingCounter.Count(_doc, files, _chkCurrent.Checked, options, tpl, _chkOnlyTemplate.Checked,
@@ -200,7 +202,7 @@ namespace LHBBlockScheduler.UI
                 var tpl = TemplateLibraryManager.Load(SettingsManager.Current.CurrentTemplateSet);
                 var images = _rows.Select(r =>
                 {
-                    var e = TemplateLibraryManager.Match(tpl, r.BlockName, r.VisibilityState);
+                    var e = TemplateLibraryManager.Match(tpl, r.BlockName, r.VisibilityState, r.NumericParamNames);
                     if (e == null || string.IsNullOrEmpty(e.ThumbnailBase64)) return null;
                     try { return Convert.FromBase64String(e.ThumbnailBase64); } catch { return null; }
                 }).ToList();

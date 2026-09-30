@@ -16,6 +16,11 @@ namespace LHBBlockScheduler.Core
         public bool CountParentBlocks { get; set; } = false;// đếm cả block cha (cụm)
         public bool SplitByVisibility { get; set; } = true; // tách theo trạng thái visibility của dynamic block
         public bool SplitByLayer { get; set; } = false;     // tách nhóm theo layer (A.4)
+        /// <summary>
+        /// v9.6: tách dòng theo tham số độ dài của block động (Linear / Polar / XY: chiều dài đầu báo tia chiếu, rộng x cao
+        /// tủ...), form hiện thêm cột Kích thước. Tắt = không tách (chủng loại không bao giờ chứa tham số số).
+        /// </summary>
+        public bool SplitBySize { get; set; }
         /// <summary>Tách dòng theo giá trị thuộc tính / tham số (khoá "A:TAG", "D:Tên") - Premium P5.</summary>
         public List<string> SplitAttributeKeys { get; set; } = new List<string>();
 
@@ -32,6 +37,13 @@ namespace LHBBlockScheduler.Core
         /// </summary>
         public TemplateLibrary TemplateFilter { get; set; }
 
+        /// <summary>
+        /// Chủng loại kiểu cũ (v9 - v9.5): block động không có Visibility ghép MỌI tham số đang hiện "Tên=Giá trị", kể cả
+        /// độ dài / góc / toạ độ (vd "Distance1=12320.33"). Chỉ LHBCAPNHAT dùng cho bảng xuất từ bản cũ để khoá dòng
+        /// lưu trong bảng vẫn khớp.
+        /// </summary>
+        internal bool LegacyVariant { get; set; }
+
         /// <summary>Số liệu lần quét gần nhất dùng options này (BlockExtractor điền sau khi quét).</summary>
         public ScanStats Stats { get; internal set; }
 
@@ -47,6 +59,7 @@ namespace LHBBlockScheduler.Core
             CountParentBlocks = s.CountParentBlocks,
             SplitByVisibility = s.SplitByVisibility,
             SplitByLayer = s.SplitByLayer,
+            SplitBySize = s.SplitBySize,
             SplitAttributeKeys = (s.SplitAttributeKeys ?? new List<string>()).ToList(),
             CountXrefBlocks = s.CountXrefBlocks,
             TemplateFilter = templateFilter
@@ -54,7 +67,8 @@ namespace LHBBlockScheduler.Core
 
         public override string ToString() =>
             $"Depth={(MaxDepth == int.MaxValue ? "max" : MaxDepth.ToString())}, CountParents={CountParentBlocks}, SplitVis={SplitByVisibility}, " +
-            $"SplitLay={SplitByLayer}, Xref={CountXrefBlocks}, BlockMau={(TemplateMode ? "'" + TemplateFilter.Name + "'" : "-")}";
+            $"SplitLay={SplitByLayer}, SplitSize={SplitBySize}, Xref={CountXrefBlocks}, BlockMau={(TemplateMode ? "'" + TemplateFilter.Name + "'" : "-")}" +
+            (LegacyVariant ? ", ChungLoaiCu" : "");
     }
 
     /// <summary>
@@ -161,6 +175,40 @@ namespace LHBBlockScheduler.Core
         public RefVia Via { get; set; }
         /// <summary>v9.4: 1 phần tử của MINSERT (nhiều phần tử dùng chung 1 đối tượng).</summary>
         public bool IsMInsertElement { get; set; }
+        /// <summary>v9.6: kích thước theo tham số độ dài của block động ("12320", "1200 x 600"), "" nếu không có.</summary>
+        public string Size { get; set; } = "";
+        /// <summary>
+        /// v9.6: tên tham số dạng số của block động KHÔNG có Visibility (null nếu không có) - để khớp block mẫu lưu từ bản cũ
+        /// có chủng loại dạng "Distance1=47116.93".
+        /// </summary>
+        public HashSet<string> NumericParamNames { get; set; }
+        public bool IsDynamic { get; set; }
+    }
+
+    /// <summary>
+    /// Tham số block động của 1 block reference, đọc 1 lần (v9.6).
+    /// Chủng loại CHỈ lấy từ Visibility, không có Visibility thì từ tham số dạng chữ (Lookup, bảng thuộc tính...).
+    /// Tham số dạng số (độ dài Linear / Polar / XY, góc Rotation, toạ độ Point, lật Flip...) không bao giờ là chủng loại:
+    /// trước v9.6 đầu báo tia chiếu (chỉ có Linear "Distance1") ra chủng loại "Distance1=12320.3286822983", mỗi độ dài
+    /// thành 1 dòng riêng (ảnh test 30/09/2026). Độ dài muốn tách thì dùng "Tách theo kích thước" (cột Kích thước).
+    /// </summary>
+    public sealed class DynamicInfo
+    {
+        public static readonly DynamicInfo Empty = new DynamicInfo();
+
+        /// <summary>Chủng loại: trạng thái Visibility; không có thì các tham số dạng chữ "Tên=Giá trị" nối " - ".</summary>
+        public string Variant { get; internal set; } = "";
+        public bool HasVisibility { get; internal set; }
+        /// <summary>Tham số độ dài (đơn vị Distance / Area, không phải toạ độ X / Y của Point) theo thứ tự trong block.</summary>
+        public List<KeyValuePair<string, double>> Sizes { get; } = new List<KeyValuePair<string, double>>();
+        /// <summary>Tên mọi tham số dạng số đang hiện (độ dài, góc, toạ độ, lật...).</summary>
+        public HashSet<string> NumericNames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Tên tham số số chỉ dùng khi block KHÔNG có Visibility (chủng loại cũ chỉ ghép tham số lúc đó) - null nếu không có.</summary>
+        public HashSet<string> LegacyNames => HasVisibility || NumericNames.Count == 0 ? null : NumericNames;
+
+        /// <summary>Kích thước hiển thị / khoá tách dòng: "12320", "1200 x 600" (làm tròn theo DynamicParamText.FormatSize).</summary>
+        public string SizeText => DynamicParamText.JoinSizes(Sizes.Select(kv => kv.Value));
     }
 
     public static class BlockExtractor
@@ -330,6 +378,8 @@ namespace LHBBlockScheduler.Core
             public readonly Dictionary<ObjectId, List<string>> VisibleKidNames = new Dictionary<ObjectId, List<string>>();
             /// <summary>Chế độ block mẫu: BTR không chứa block mẫu nào ở mọi tầng -> không duyệt lại.</summary>
             public readonly HashSet<ObjectId> NoTemplateBtrs = new HashSet<ObjectId>();
+            /// <summary>v9.6: block động có tham số số (không làm chủng loại) -> tên tham số + kích thước mẫu, để ghi log 1 lần / tên block.</summary>
+            public readonly Dictionary<string, string> NumericParamLog = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             public ExtractionOptions Options;
             public TemplateLibrary Template;
             public HashSet<string> TemplateNames;
@@ -381,6 +431,10 @@ namespace LHBBlockScheduler.Core
                        (noCorners > 0 ? $", {noCorners} block không tính được khung bao (chỉ so trùng theo điểm chèn)" : ""));
             if (stats.SkippedXrefNames.Count > 0)
                 Logger.Log($"BlockExtractor: XREF bỏ qua (bật 'Đếm trong XREF' để đếm block bên trong): [{string.Join(", ", stats.SkippedXrefNames)}]");
+            if (cache.NumericParamLog.Count > 0)
+                Logger.Log($"BlockExtractor: {cache.NumericParamLog.Count} block động có tham số số (độ dài / góc / toạ độ / lật) KHÔNG tính làm chủng loại" +
+                           (options.SplitBySize ? ", tách dòng theo kích thước" : " (bật 'Tách theo kích thước' để tách dòng)") + ": " +
+                           string.Join("; ", cache.NumericParamLog.Take(20).Select(kv => kv.Key + " " + kv.Value)));
             string depthWarn = stats.DepthWarning();
             if (depthWarn != null) Logger.Warn("BlockExtractor: " + depthWarn);
             return scannedRefs;
@@ -469,15 +523,20 @@ namespace LHBBlockScheduler.Core
 
             bool templateMode = cache.Template != null;
             Dictionary<string, string> attributes = null;
-            string visibility = "";
+            var dyn = DynamicInfo.Empty;
             bool isTemplate = false;
             // Chế độ block mẫu: block không trùng tên block mẫu nào thì không cần đọc thuộc tính / tham số dynamic
             if (!templateMode || cache.TemplateNames.Contains(realName) || cache.TemplateNames.Contains(TemplateLibraryManager.StripXrefPrefix(realName)))
             {
                 attributes = ReadAttributes(tr, br);
-                visibility = ReadDynamic(br, realName, ref attributes);
-                isTemplate = templateMode && TemplateLibraryManager.Match(cache.Template, realName, visibility) != null;
+                dyn = ReadDynamic(br, realName, ref attributes, cache.Options.LegacyVariant);
+                isTemplate = templateMode && TemplateLibraryManager.Match(cache.Template, realName, dyn.Variant, dyn.LegacyNames) != null;
+                if (dyn.NumericNames.Count > 0 && !cache.NumericParamLog.ContainsKey(realName))
+                    cache.NumericParamLog[realName] = $"[{string.Join(", ", dyn.NumericNames)}]" +
+                                                      (dyn.Sizes.Count > 0 ? $" kích thước '{dyn.SizeText}'" : "") +
+                                                      (dyn.HasVisibility ? $", chủng loại theo Visibility '{dyn.Variant}'" : $", chủng loại '{dyn.Variant}'");
             }
+            string visibility = dyn.Variant;
             // Chế độ block mẫu: chỉ block mẫu được ghi nhận, block khác là vỏ chứa; đi sâu không giới hạn,
             // chỉ đi vào trong block mẫu khi đếm cả block cha. Chế độ thường: theo độ sâu quét.
             bool record = !templateMode || isTemplate;
@@ -516,7 +575,10 @@ namespace LHBBlockScheduler.Core
                         Rotation = Math.Atan2(cs.Xaxis.Y, cs.Xaxis.X),
                         Attributes = attributes,
                         Via = childVia,
-                        IsMInsertElement = isMInsert
+                        IsMInsertElement = isMInsert,
+                        Size = dyn.SizeText,
+                        NumericParamNames = dyn.LegacyNames,
+                        IsDynamic = isDynamic
                     };
                     results.Add(currentRef);
                 }
@@ -673,16 +735,17 @@ namespace LHBBlockScheduler.Core
         }
 
         /// <summary>
-        /// Đọc tham số dynamic block MỘT lần (DynamicBlockReferencePropertyCollection tốn thời gian, trước đây đọc 2 lần
-        /// cho mỗi block): trả chủng loại (giống ReadVisibility) và thêm tham số đang hiện trừ Visibility vào attrs
-        /// (khoá "D:Tên") - Premium P5.
+        /// Đọc tham số dynamic block MỘT lần (DynamicBlockReferencePropertyCollection tốn thời gian): chủng loại, kích thước,
+        /// tên tham số số (DynamicInfo) và thêm tham số đang hiện trừ Visibility vào attrs (khoá "D:Tên") - Premium P5.
+        /// legacyVariant = chủng loại kiểu v9 - v9.5 (ghép cả tham số số) cho bảng cũ khi LHBCAPNHAT.
         /// </summary>
-        private static string ReadDynamic(BlockReference br, string realName, ref Dictionary<string, string> attrs)
+        private static DynamicInfo ReadDynamic(BlockReference br, string realName, ref Dictionary<string, string> attrs, bool legacyVariant = false)
         {
-            if (!br.IsDynamicBlock) return "";
+            if (!br.IsDynamicBlock) return DynamicInfo.Empty;
+            var info = new DynamicInfo();
             object visValue = null;
-            bool visFound = false;
-            var allProps = new List<string>();
+            var textProps = new List<string>();
+            var legacyProps = new List<string>();
             try
             {
                 foreach (DynamicBlockReferenceProperty p in br.DynamicBlockReferencePropertyCollection)
@@ -693,10 +756,23 @@ namespace LHBBlockScheduler.Core
                     if (pName.IndexOf("Visibility", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         // Tham số Visibility đầu tiên là chủng loại; tham số đứng sau không ghép vào chủng loại nữa
-                        if (!visFound) { visFound = true; visValue = v; }
+                        if (!info.HasVisibility) { info.HasVisibility = true; visValue = v; }
                         continue;
                     }
-                    if (!visFound) allProps.Add($"{pName}={v}");
+                    if (!info.HasVisibility) legacyProps.Add($"{pName}={v}");
+
+                    bool numeric = IsNumber(v);
+                    if (numeric)
+                    {
+                        if (pName.Length > 0) info.NumericNames.Add(pName);
+                        if (IsSizeProperty(p, pName))
+                            info.Sizes.Add(new KeyValuePair<string, double>(pName, Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture)));
+                    }
+                    else if (v != null && !(v is Point3d) && !(v is Point2d) && !(v is ObjectId))
+                    {
+                        string text = v.ToString().Trim();
+                        if (text.Length > 0) textProps.Add($"{pName}={text}");
+                    }
 
                     if (pName.Length == 0) continue;
                     string s;
@@ -710,11 +786,34 @@ namespace LHBBlockScheduler.Core
             catch (Exception ex)
             {
                 Logger.Warn($"BlockExtractor: không đọc được dynamic property cho '{realName}': {ex.Message}");
-                return "";
+                return DynamicInfo.Empty;
             }
-            if (visFound && visValue != null) return visValue.ToString();
-            return allProps.Count > 0 ? string.Join(" - ", allProps) : "";
+            if (info.HasVisibility && visValue != null) info.Variant = visValue.ToString();
+            else if (legacyVariant) info.Variant = string.Join(" - ", legacyProps);
+            else info.Variant = info.HasVisibility ? "" : string.Join(" - ", textProps);
+            return info;
         }
+
+        /// <summary>
+        /// Tham số độ dài (Linear / Polar / XY: đơn vị Distance hoặc Area) đang có tác dụng ở chủng loại hiện tại. Toạ độ X / Y
+        /// của Point (vị trí nhãn, đầu dây...) không phải kích thước thiết bị. Lỗi đọc -> không tính (không làm mất chủng loại).
+        /// </summary>
+        private static bool IsSizeProperty(DynamicBlockReferenceProperty p, string name)
+        {
+            try
+            {
+                var u = p.UnitsType;
+                return (u == DynamicBlockReferencePropertyUnitsType.Distance || u == DynamicBlockReferencePropertyUnitsType.Area) &&
+                       p.VisibleInCurrentVisibilityState && !DynamicParamText.IsPointCoordinate(name);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsNumber(object v) =>
+            v is double || v is float || v is short || v is int || v is long || v is byte || v is ushort || v is uint || v is decimal;
 
         /// <summary>Khoá thuộc tính -> tên cột dễ đọc: "A:MA_TB" -> "MA_TB", "D:Distance1" -> "Tham số Distance1".</summary>
         public static string AttributeKeyLabel(string key) =>
@@ -753,13 +852,56 @@ namespace LHBBlockScheduler.Core
 
         /// <summary>
         /// Chủng loại của block: giá trị tham số Visibility của dynamic block; dynamic block không có Visibility thì
-        /// ghép các tham số đang hiện; block thường = "". Dùng chung cho quét thống kê và thư viện block mẫu.
+        /// ghép các tham số dạng chữ đang hiện (v9.6: bỏ tham số số); block thường = "". Dùng chung cho quét thống kê và
+        /// thư viện block mẫu.
         /// </summary>
-        public static string ReadVisibility(BlockReference br, string realName)
+        public static string ReadVisibility(BlockReference br, string realName) => ReadDynamicInfo(br, realName).Variant;
+
+        /// <summary>Tham số block động (chủng loại, kích thước, tên tham số số) - cùng hàm đọc với lúc quét.</summary>
+        public static DynamicInfo ReadDynamicInfo(BlockReference br, string realName)
         {
             // Cùng 1 hàm đọc với lúc quét -> lọc block mẫu và gom dòng luôn ra cùng chủng loại
             Dictionary<string, string> ignored = null;
             return ReadDynamic(br, realName, ref ignored);
+        }
+
+        /// <summary>
+        /// Tham số block động của 1 block theo TÊN (lấy 1 block reference bất kỳ của block đó trong bản vẽ, kể cả bản đã
+        /// sửa tham số nằm trong BTR ẩn danh *U). null = bản vẽ không có block này / không phải block động / chưa đặt lần nào.
+        /// Dùng chuẩn hoá chủng loại cũ "Distance1=..." của block mẫu (v9.6).
+        /// </summary>
+        public static DynamicInfo FindDynamicInfo(Database db, string blockName)
+        {
+            if (db == null || string.IsNullOrEmpty(blockName)) return null;
+            try
+            {
+                using (var tr = db.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    if (!bt.Has(blockName)) return null;
+                    var btr = (BlockTableRecord)tr.GetObject(bt[blockName], OpenMode.ForRead);
+                    if (!btr.IsDynamicBlock) return null;
+                    var btrIds = new List<ObjectId> { btr.ObjectId };
+                    foreach (ObjectId anon in btr.GetAnonymousBlockIds()) btrIds.Add(anon);
+                    foreach (var id in btrIds)
+                    {
+                        var b = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                        foreach (ObjectId refId in b.GetBlockReferenceIds(true, false))
+                        {
+                            if (refId.IsErased || !(tr.GetObject(refId, OpenMode.ForRead) is BlockReference br) || br is Table) continue;
+                            var info = ReadDynamicInfo(br, blockName);
+                            tr.Commit();
+                            return info;
+                        }
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"BlockExtractor.FindDynamicInfo '{blockName}': {ex.Message}");
+            }
+            return null;
         }
 
         private static List<BlockItem> GroupScannedRefs(Document doc, List<ScannedRef> refs, ExtractionOptions options)
@@ -783,6 +925,11 @@ namespace LHBBlockScheduler.Core
                 if (options.SplitByLayer && !string.IsNullOrEmpty(r.Layer))
                 {
                     key += "||LAY:" + r.Layer;
+                }
+                // v9.6: tách theo kích thước (tham số độ dài block động), khoá đã làm tròn (FormatSize)
+                if (options.SplitBySize && !string.IsNullOrEmpty(r.Size))
+                {
+                    key += "||SIZE:" + r.Size;
                 }
                 if (options.SplitAttributeKeys != null)
                 {
@@ -822,6 +969,9 @@ namespace LHBBlockScheduler.Core
                     BlockName = first.BlockName,
                     DisplayName = displayName,
                     VisibilityState = first.VisibilityState,
+                    Size = DynamicParamText.GroupSize(list.Select(x => x.Size)),
+                    NumericParamNames = first.NumericParamNames,
+                    IsDynamic = first.IsDynamic,
                     BlockKind = first.BlockKind,
                     Unit = "Cái",
                     Note = "",
@@ -882,12 +1032,20 @@ namespace LHBBlockScheduler.Core
                 items.Add(item);
             }
 
-            // Sắp xếp mặc định theo tên alphabet
-            var sorted = items.OrderBy(i => i.BlockName, StringComparer.OrdinalIgnoreCase).ToList();
+            // Sắp xếp mặc định theo tên alphabet (tách theo kích thước: cùng tên xếp theo kích thước tăng dần)
+            var sorted = items.OrderBy(i => i.BlockName, StringComparer.OrdinalIgnoreCase)
+                              .ThenBy(i => DynamicParamText.SizeSortKey(i.Size)).ToList();
             for (int i = 0; i < sorted.Count; i++)
                 sorted[i].Order = i;
 
             Logger.Log($"BlockExtractor: Gom thành {sorted.Count} nhóm Block [{options}]");
+            if (options.SplitBySize)
+            {
+                var sized = sorted.Where(i => !string.IsNullOrEmpty(i.Size)).ToList();
+                if (sized.Count > 0)
+                    Logger.Log($"BlockExtractor: tách theo kích thước -> {sized.Count} dòng có kích thước: " +
+                               string.Join("; ", sized.Take(30).Select(i => $"{i.BlockName} [{i.Size}] x{i.Count}")) + (sized.Count > 30 ? "..." : ""));
+            }
             return sorted;
         }
     }

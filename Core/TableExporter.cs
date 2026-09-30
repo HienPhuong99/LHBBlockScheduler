@@ -320,6 +320,7 @@ namespace LHBBlockScheduler.Core
                 case "colBlockName": return item.BlockName;
                 case "colDisplayName": return !string.IsNullOrEmpty(item.DisplayName) ? item.DisplayName : item.BlockName;
                 case "colVisibility": return item.VisibilityState ?? "";
+                case "colSize": return item.Size ?? "";
                 case "colBlockKind": return item.BlockKind ?? "";
                 case "colUnit": return item.Unit ?? "Cái";
                 case "colCount": return item.Count.ToString();

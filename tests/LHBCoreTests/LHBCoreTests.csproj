@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Kiểm thử hàm thuần của add-in ngoài AutoCAD (v9.6): kích thước tham số block động, chủng loại lưu từ bản cũ, khớp
+    block mẫu. Dùng ĐÚNG file nguồn của add-in. Chạy: cd tests/LHBCoreTests rồi dotnet run -c Release (mã thoát 0 = đạt hết).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\DynamicParamText.cs" Link="Shared\DynamicParamText.cs" />
+  </ItemGroup>
+</Project>

@@ -47,6 +47,7 @@ namespace LHBBlockScheduler.Core
             ("LHBMAU", "Thư viện block mẫu: thêm / xoá / sắp xếp / chèn block mẫu", false),
             ("LHBLEGEND", "Quét bảng chú thích (Table) có sẵn vào bộ block mẫu", false),
             ("LHBDUPCLEAR", "Xoá vòng đỏ / đường dẫn đánh dấu block trùng", false),
+            ("LHBKHOPCOT", "Khớp độ rộng cột bảng đã xuất theo chữ (như double-click mép cột Excel)", false),
             ("LHBCAPNHAT", "[Premium] Cập nhật bảng đã xuất sau khi sửa bản vẽ (ô đổi tô đỏ)", false),
             ("LHBKHUVUC", "[Premium] Khai báo tầng / khu vực: bảng có cột SL từng khu", false),
             ("LHBNHIEUBV", "[Premium] Thống kê nhiều bản vẽ DWG cùng lúc", false),

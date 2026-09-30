@@ -208,8 +208,39 @@ namespace LHBBlockScheduler.UI
             _dirty = false;
             SettingsManager.Current.CurrentTemplateSet = _lib.Name;
             SettingsManager.SaveSettings();
+            FixLegacyVariants();
             RefreshGrid();
             Logger.Log($"[TemplateLibraryDialog] Mở bộ '{_lib.Name}': {_lib.Entries.Count} block mẫu");
+        }
+
+        /// <summary>
+        /// v9.6: block mẫu thêm từ bản cũ có chủng loại dạng "Distance1=47116.93" (block động không có Visibility, bản cũ
+        /// ghép cả tham số độ dài / góc / toạ độ) -> để trống như "Thêm từ bản vẽ" của bản mới (ảnh test 30/09/2026).
+        /// Cần block đó có trong bản vẽ đang mở để biết tham số nào là số; sửa xong tự lưu bộ (chỉ đổi chủng loại).
+        /// Block không có trong bản vẽ: giữ nguyên, lúc quét vẫn khớp đúng (TemplateLibraryManager.Match bỏ qua phần số).
+        /// </summary>
+        private void FixLegacyVariants()
+        {
+            try
+            {
+                var names = _lib.Entries.Where(e => (e.VisibilityState ?? "").IndexOf('=') >= 0).Select(e => e.BlockName)
+                                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (names.Count == 0) return;
+                int changed = 0, notInDrawing = 0;
+                foreach (var n in names)
+                {
+                    var info = BlockExtractor.FindDynamicInfo(_doc.Database, n);
+                    if (info == null) { notInDrawing++; continue; }
+                    if (info.LegacyNames != null) changed += TemplateLibraryManager.NormalizeLegacyVariants(_lib, n, info.LegacyNames);
+                }
+                Logger.Log($"[TemplateLibraryDialog] Bộ '{_lib.Name}': {names.Count} block mẫu có chủng loại dạng 'Tên=Giá trị', chuẩn hoá {changed}" +
+                           (notInDrawing > 0 ? $", {notInDrawing} block không có trong bản vẽ đang mở (giữ nguyên)" : ""));
+                if (changed > 0) TemplateLibraryManager.Save(_lib);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"[TemplateLibraryDialog] Chuẩn hoá chủng loại cũ bộ '{_lib?.Name}'");
+            }
         }
 
         /// <summary>Có thay đổi chưa lưu: hỏi lưu. Trả false nếu user bấm Huỷ.</summary>
@@ -434,6 +465,7 @@ namespace LHBBlockScheduler.UI
         private void Action_AddFromDrawing()
         {
             int added = 0, existed = 0, skipped = 0;
+            bool legacyFixed = false;
             var ownerForm = Owner;
             Hide();
             ownerForm?.Hide();
@@ -457,7 +489,10 @@ namespace LHBBlockScheduler.UI
                                 skipped++;
                                 continue;
                             }
-                            string vis = BlockExtractor.ReadVisibility(br, name);
+                            var dyn = BlockExtractor.ReadDynamicInfo(br, name);
+                            string vis = dyn.Variant;
+                            // v9.6: block mẫu cũ của block này có chủng loại "Distance1=..." -> chuẩn hoá trước khi so (không thêm trùng)
+                            if (dyn.LegacyNames != null && TemplateLibraryManager.NormalizeLegacyVariants(_lib, name, dyn.LegacyNames) > 0) legacyFixed = true;
                             if (_lib.Entries.Any(x => string.Equals(x.BlockName, name, StringComparison.OrdinalIgnoreCase) &&
                                                       string.Equals(x.VisibilityState ?? "", vis, StringComparison.OrdinalIgnoreCase)))
                             {
@@ -498,7 +533,7 @@ namespace LHBBlockScheduler.UI
             {
                 ownerForm?.Show();
                 Show();
-                if (added > 0) _dirty = true;
+                if (added > 0 || legacyFixed) _dirty = true;
                 RefreshGrid(added > 0 ? _lib.Entries.Count - 1 : -1);
                 Logger.Log($"[TemplateLibraryDialog] Thêm từ bản vẽ vào bộ '{_lib.Name}': mới {added}, đã có {existed}, bỏ {skipped}");
                 if (added + existed + skipped > 0)

@@ -36,8 +36,32 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (30/09/2026): bản v9.5 Premium (bản quyền v2, ĐÃ BẬT bản quyền) đã phát hành, CHƯA có kết quả test (v9 – v9.4 cũng chưa)
-v9.5 làm ở phiên cloud, PR mới từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
+## Trạng thái (30/09/2026): bản v9.6 Premium (chủng loại block động + tách theo kích thước + LHBKHOPCOT) đã phát hành, CHƯA có kết quả test (v9 – v9.5 cũng chưa)
+v9.6 Premium (MD5 `@@MD5_V96@@`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit @@COMMIT_V96@@) = v9.5 +
+yêu cầu user 30/09 (ảnh hộp thoại block mẫu + form + bảng CAD có đầu báo tia chiếu chủng loại "Distance1=12320.3286822983"):
+- Chủng loại block động CHỈ từ Visibility, không có Visibility thì tham số dạng chữ (Lookup...). Tham số SỐ (độ dài Linear /
+  Polar / XY, góc, toạ độ Point, lật Flip) không bao giờ làm chủng loại (trước: ghép "Tên=Giá trị" mọi tham số -> mỗi độ dài
+  1 dòng, cột Chủng loại bảng xuất rộng vì chữ dài). `BlockExtractor.ReadDynamic` trả `DynamicInfo` (Variant, HasVisibility,
+  Sizes, NumericNames, LegacyNames = tên tham số số khi KHÔNG có Visibility); `ReadDynamicInfo`, `FindDynamicInfo(db, tên)`.
+- "Tách theo kích thước" (form hàng 2, settings `SplitBySize`, `ExtractionOptions.SplitBySize`, TableScanInfo.SplitBySize):
+  kích thước = tham số đơn vị Distance / Area, `VisibleInCurrentVisibilityState`, trừ toạ độ "... X/Y" của Point; nhiều tham
+  số "1200 x 600"; làm tròn `DynamicParamText.FormatSize` (~4 chữ số có nghĩa, dấu chấm cố định). Khoá gom "||SIZE:". Cột
+  `colSize` "Kích thước" (DataPropertyName Size, sửa được) hiện theo ô tick; bảng CAD / Excel (số) có cột này. Nút Căn lề
+  chuyển lên hàng 1. Quét thêm (`FindRowFor`) nay khớp theo GroupKey. Nhiều bản vẽ không tách theo kích thước.
+- Block mẫu cũ "Distance1=47116.93": `DynamicParamText.MatchVariant / StripNumericParts` bỏ phần tham số số khi so (có tên
+  tham số số của block đang quét, chỉ khi block không có Visibility -> trạng thái Visibility dạng "K=80" không bị đụng);
+  `TemplateLibraryDialog.FixLegacyVariants` tự để trống + lưu khi mở hộp thoại (block có trong bản vẽ); Thêm từ bản vẽ không thêm trùng.
+- LHBCAPNHAT: TableScanInfo `Version` 3 (`TableUpdater.ScanInfoVersion`); bảng Version < 3 quét với
+  `ExtractionOptions.LegacyVariant` (chủng loại kiểu cũ) để khoá dòng cũ vẫn khớp.
+- Ô ký hiệu: block động (`BlockItem.IsDynamic`) luôn chép hình từ instance như block có chủng loại; tên LHB_SYM kèm kích thước.
+- `LHBKHOPCOT` (`Core/TableAutoFit.cs`, không cần Premium, Ribbon / palette / LHBLENH / LHB.lsp): khớp độ rộng cột chữ của
+  AutoCAD Table theo chữ (cùng công thức lúc xuất), bỏ ô gộp + cột ký hiệu. User hỏi "bảng co giãn, tự fix như Excel":
+  AutoCAD Table vốn kéo grip được (chữ xuống dòng, ký hiệu AutoFit), lệnh này = double-click mép cột Excel.
+- `Core/DynamicParamText.cs` hàm thuần + `tests/LHBCoreTests` (39 kiểm tra, chạy với văn hoá vi-VN).
+Cần xác nhận khi có kết quả test v9.6: đầu báo tia chiếu 1 dòng chủng loại trống; tách theo kích thước đúng độ dài; block mẫu
+cũ tự để trống + chỉ quét block mẫu đếm đủ mọi độ dài; `UnitsType` / `VisibleInCurrentVisibilityState` đọc được (log
+`BlockExtractor: N block động có tham số số`); LHBKHOPCOT đổi rộng cột, dòng tự thấp lại.
+v9.5 làm ở phiên cloud, PR #2 (gộp main 30/09 theo lời user "push và gộp lại hết") từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
 Zip v9.5 gửi user là bản build cloud (MD5 `D1626C1147BC58F3AC0FED232D10BC95`); nếu build lại trên máy dev bằng libs\ như v9.4
 thì MD5 đổi -> sửa MD5 trong `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md` + dòng v9.5 bên dưới.
 v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.

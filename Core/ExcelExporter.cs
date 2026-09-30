@@ -60,6 +60,10 @@ namespace LHBBlockScheduler.Core
                     {
                         string text = TableExporter.GetItemTextForColumn(it, key);
                         if (numeric[c] && double.TryParse(text, out double v)) { values[c] = v; sums[c] += v; styles[c] = XlsxWriter.XlStyle.Number; }
+                        // v9.6: kích thước 1 số ("12320") ghi thành số để tính trong Excel (không cộng ở dòng tổng)
+                        else if (key == "colSize" && double.TryParse(text, System.Globalization.NumberStyles.Float,
+                                                                     System.Globalization.CultureInfo.InvariantCulture, out double size))
+                        { values[c] = size; styles[c] = XlsxWriter.XlStyle.Number; }
                         else
                         {
                             values[c] = text;

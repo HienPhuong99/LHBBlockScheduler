@@ -14,6 +14,10 @@ namespace LHBBlockScheduler.Core
         public bool SplitByVisibility { get; set; } = true;
         public bool SplitByLayer { get; set; } = false;
         /// <summary>
+        /// v9.6: tách dòng theo tham số độ dài của block động + cột Kích thước. Mặc định false (settings.json cũ thiếu field -> false).
+        /// </summary>
+        public bool SplitBySize { get; set; }
+        /// <summary>
         /// v9.4: true = đếm cả block nằm trong XREF. Mặc định false = bỏ qua XREF (settings.json cũ thiếu field -> false,
         /// đúng mặc định vì DataContractJsonSerializer không chạy property initializer).
         /// </summary>

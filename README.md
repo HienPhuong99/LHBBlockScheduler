@@ -4,7 +4,7 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 - Hướng dẫn sử dụng: [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md)
 - Tính năng Premium (từ v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
-- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.5 Premium — bản quyền v2: bật bản quyền, dùng thử Premium 30 ngày, mã `LHB2-...`, key review trọn đời; v9.4 "ổn định" sửa đếm ARRAY / MINSERT / XREF)
+- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.6 Premium — chủng loại block động không còn "Distance1=...", tách theo kích thước + cột Kích thước, lệnh `LHBKHOPCOT` khớp cột bảng như Excel; v9.5 bản quyền v2; v9.4 "ổn định" sửa đếm ARRAY / MINSERT / XREF)
 - Bản đóng gói (zip): mục **Releases** của repo
 - Review chức năng, đề xuất tính năng, kế hoạch thương mại hoá (29/09/2026): [docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md](docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md)
 - Bản quyền v2, mức an toàn, cấp và quản lý key (30/09/2026): [docs/BAN_QUYEN_VA_CAP_KEY.md](docs/BAN_QUYEN_VA_CAP_KEY.md)
@@ -13,8 +13,8 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 | Nhóm | Tính năng |
 |---|---|
-| Thống kê | Quét chọn block (kể cả block lồng, dynamic block theo chủng loại), gộp nhóm, gợi ý gộp theo hình, quét thêm, thư viện block mẫu (chỉ quét block mẫu), tìm block trùng / che lấp |
-| Xuất bảng | AutoCAD Table có ký hiệu block trong ô (đều cỡ), bảng Line + Text, căn lề từng ô, độ rộng cột theo form |
+| Thống kê | Quét chọn block (kể cả block lồng, dynamic block theo chủng loại), tách theo kích thước (tham số độ dài block động), gộp nhóm, gợi ý gộp theo hình, quét thêm, thư viện block mẫu (chỉ quét block mẫu), tìm block trùng / che lấp |
+| Xuất bảng | AutoCAD Table có ký hiệu block trong ô (đều cỡ), bảng Line + Text, căn lề từng ô, độ rộng cột theo chữ / theo form, khớp lại cột như Excel (`LHBKHOPCOT`) |
 | Premium | Theo tầng / khu vực, bảng tự cập nhật, nhiều bản vẽ, chiều dài ống / dây, cột thuộc tính, soát lỗi đếm, đánh số thiết bị, vùng bảo vệ PCCC, Excel có ảnh, mẫu bảng, Ribbon + palette, thay block hàng loạt, bản quyền |
 | Tiện ích | Bảng lệnh + đổi phím tắt (`LHBLENH`), LISP nạp đúng bản theo MD5, chẩn đoán `LHBDIAG` |
 

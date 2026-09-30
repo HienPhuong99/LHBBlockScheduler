@@ -128,11 +128,12 @@ namespace LHBBlockScheduler.UI
             const int maxRoots = 20000;
             var info = new TableScanInfo
             {
-                Version = 2,
+                Version = TableUpdater.ScanInfoVersion,
                 MaxDepth = o.MaxDepth,
                 CountParentBlocks = o.CountParentBlocks,
                 SplitByVisibility = o.SplitByVisibility,
                 SplitByLayer = o.SplitByLayer,
+                SplitBySize = o.SplitBySize,
                 CountXrefBlocks = o.CountXrefBlocks,
                 SplitAttributeKeys = o.SplitAttributeKeys,
                 TemplateSet = CurrentTemplate().Name,

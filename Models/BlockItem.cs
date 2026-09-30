@@ -57,6 +57,21 @@ namespace LHBBlockScheduler.Models
         /// <summary>Chủng loại (giá trị visibility state của dynamic block).</summary>
         public string VisibilityState { get; set; }
 
+        /// <summary>
+        /// v9.6: kích thước theo tham số độ dài của block động ("12320", "1200 x 600") - cột "Kích thước" khi bật
+        /// "Tách theo kích thước". Rỗng = block không có tham số độ dài.
+        /// </summary>
+        public string Size { get; set; } = "";
+
+        /// <summary>
+        /// v9.6: tên tham số dạng số của block động không có Visibility (null nếu không có) - khớp block mẫu lưu từ bản cũ
+        /// (chủng loại dạng "Distance1=47116.93"). Chỉ trong bộ nhớ.
+        /// </summary>
+        public ICollection<string> NumericParamNames { get; set; }
+
+        /// <summary>v9.6: block động (ô ký hiệu chép hình từ block thật trên bản vẽ như block có chủng loại).</summary>
+        public bool IsDynamic { get; set; }
+
         /// <summary>Đã được nhận diện/khớp từ thư viện thiết bị chưa (chấm xanh/đỏ).</summary>
         public bool IsMatchedByLibrary { get; set; }
 

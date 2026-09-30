@@ -36,7 +36,7 @@ namespace LHBBlockScheduler.UI
         private DataGridView _grid;
         private TextBox _txtSearch;
         private ComboBox _cboScanDepth;
-        private CheckBox _chkCountParents, _chkSplitVisibility, _chkSplitLayer, _chkExcludeDup, _chkXref;
+        private CheckBox _chkCountParents, _chkSplitVisibility, _chkSplitSize, _chkSplitLayer, _chkExcludeDup, _chkXref;
         private ToolStripStatusLabel _lblStatus;
 
         // v9.4: vùng chọn của RIÊNG form này (trước đây BlockExtractor.LastSelectedObjectIds static dùng chung mọi bản
@@ -86,6 +86,7 @@ namespace LHBBlockScheduler.UI
             RecomputeDuplicates();
             LoadThumbnailsAsync();
             ApplyColumnVisibilityFromSettings();
+            SyncSizeColumn();
             ApplyColumnHeadersFromSettings();
             UpdateStatus();
             _binding = DocumentBinding.Bind(this, doc);
@@ -147,7 +148,7 @@ namespace LHBBlockScheduler.UI
             // thư viện block mẫu -> lưới cao thêm 1 hàng.
             var topContainer = new Panel { Dock = DockStyle.Top, Height = 74 };
 
-            // Hàng 1: Tìm kiếm + Bộ block mẫu + Quét thêm + Premium
+            // Hàng 1: Tìm kiếm + Bộ block mẫu + Quét thêm + Premium + Căn lề
             var row1 = new FlowLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -204,9 +205,17 @@ namespace LHBBlockScheduler.UI
             btnPremium.BackColor = UiKit.Gold;
             btnPremium.ForeColor = Color.White;
             BuildPremiumMenu();
-            row1.Controls.AddRange(new Control[] { _txtSearch, lblTpl, _cboTemplateSet, btnTemplate, _chkOnlyTemplate, btnScanMore, btnPremium });
 
-            // Hàng 2: Tuỳ chọn quét block (Độ sâu, Block cha, Visibility, Layer), block trùng, căn lề
+            // Căn lề như Excel: quét chọn ô trên grid rồi bấm nút, bảng xuất CAD dùng đúng căn lề này.
+            // v9.6: chuyển từ hàng 2 lên hàng 1 để hàng 2 có chỗ cho ô "Tách theo kích thước"
+            var lblAlign = new Label { Text = "   Căn lề:", AutoSize = true, Padding = new Padding(0, 5, 0, 0) };
+            var btnAlignLeft = MakeButton("Trái", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Left), 50);
+            var btnAlignCenter = MakeButton("Giữa", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Center), 50);
+            var btnAlignRight = MakeButton("Phải", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Right), 50);
+            row1.Controls.AddRange(new Control[] { _txtSearch, lblTpl, _cboTemplateSet, btnTemplate, _chkOnlyTemplate, btnScanMore, btnPremium,
+                                                   lblAlign, btnAlignLeft, btnAlignCenter, btnAlignRight });
+
+            // Hàng 2: Tuỳ chọn quét block (Độ sâu, Block cha, Chủng loại, Kích thước, Layer, XREF), block trùng
             var row2 = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -249,6 +258,26 @@ namespace LHBBlockScheduler.UI
                 Checked = SettingsManager.Current.SplitByVisibility
             };
             _chkSplitVisibility.CheckedChanged += (s, e) => OnScanOptionChanged();
+            _tips.SetToolTip(_chkSplitVisibility, "Tách dòng theo chủng loại = trạng thái Visibility của block động (hoặc tham số dạng chữ: Lookup...).\n" +
+                                                  "Tham số độ dài / góc / toạ độ (Distance1, Angle1...) không làm chủng loại.");
+
+            // v9.6: tách theo tham số độ dài của block động (chiều dài đầu báo tia chiếu...) + cột Kích thước
+            _chkSplitSize = new CheckBox
+            {
+                Text = "Tách theo kích thước",
+                AutoSize = true,
+                Padding = new Padding(8, 4, 0, 0),
+                Checked = SettingsManager.Current.SplitBySize
+            };
+            _chkSplitSize.CheckedChanged += (s, e) =>
+            {
+                SyncSizeColumn();
+                SaveColumnVisibilitySettings();
+                OnScanOptionChanged();
+            };
+            _tips.SetToolTip(_chkSplitSize, "Bật: block động có tham số độ dài (Linear / Polar / XY: chiều dài đầu báo tia chiếu, rộng x cao...)\n" +
+                                            "tách mỗi kích thước 1 dòng và hiện cột 'Kích thước' (xuất cả ra bảng CAD / Excel).\n" +
+                                            "Tắt: không tách, ẩn cột. Toạ độ điểm và góc xoay không tính.");
 
             _chkSplitLayer = new CheckBox
             {
@@ -294,14 +323,8 @@ namespace LHBBlockScheduler.UI
                 Logger.Log($"[BlockScheduleForm] Không đếm block trùng = {_chkExcludeDup.Checked}");
             };
 
-            // Căn lề như Excel: quét chọn ô trên grid rồi bấm nút, bảng xuất CAD dùng đúng căn lề này
-            var lblAlign = new Label { Text = " Căn lề:", AutoSize = true, Padding = new Padding(0, 5, 0, 0) };
-            var btnAlignLeft = MakeButton("Trái", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Left), 50);
-            var btnAlignCenter = MakeButton("Giữa", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Center), 50);
-            var btnAlignRight = MakeButton("Phải", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Right), 50);
-
-            row2.Controls.AddRange(new Control[] { lblDepth, _cboScanDepth, _chkCountParents, _chkSplitVisibility, _chkSplitLayer, _chkXref, btnNameFromVis,
-                                                   btnFindDup, _chkExcludeDup, lblAlign, btnAlignLeft, btnAlignCenter, btnAlignRight });
+            row2.Controls.AddRange(new Control[] { lblDepth, _cboScanDepth, _chkCountParents, _chkSplitVisibility, _chkSplitSize, _chkSplitLayer, _chkXref,
+                                                   btnNameFromVis, btnFindDup, _chkExcludeDup });
 
             // Dock Fill phải thêm TRƯỚC (được xếp sau cùng, lấy phần còn lại dưới hàng Top)
             topContainer.Controls.Add(row2);
@@ -462,6 +485,18 @@ namespace LHBBlockScheduler.UI
                 DataPropertyName = "VisibilityState",
                 ReadOnly = false,
                 Width = 130
+            });
+
+            // 4b. Kích thước (v9.6): tham số độ dài của block động, hiện khi bật "Tách theo kích thước"
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "colSize",
+                HeaderText = "Kích thước",
+                DataPropertyName = "Size",
+                ReadOnly = false,
+                Width = 90,
+                Visible = SettingsManager.Current.SplitBySize,
+                ToolTipText = "Tham số độ dài của block động (đơn vị bản vẽ), vd chiều dài đầu báo tia chiếu. Nhiều tham số: rộng x cao"
             });
 
             // 5. Loại block (Tĩnh / Động / Có thuộc tính)
@@ -883,6 +918,13 @@ namespace LHBBlockScheduler.UI
             }
         }
 
+        /// <summary>v9.6: cột Kích thước hiện theo ô "Tách theo kích thước" (tắt = không tách, ẩn cột; bảng xuất cũng bỏ cột).</summary>
+        private void SyncSizeColumn()
+        {
+            if (_grid == null || _chkSplitSize == null || !_grid.Columns.Contains("colSize")) return;
+            _grid.Columns["colSize"].Visible = _chkSplitSize.Checked;
+        }
+
         private void SaveColumnVisibilitySettings()
         {
             var dict = SettingsManager.Current.ColumnVisibility ?? new Dictionary<string, bool>();
@@ -1086,6 +1128,7 @@ namespace LHBBlockScheduler.UI
                 CountParentBlocks = _chkCountParents.Checked,
                 SplitByVisibility = _chkSplitVisibility.Checked,
                 SplitByLayer = _chkSplitLayer.Checked,
+                SplitBySize = _chkSplitSize.Checked,
                 SplitAttributeKeys = (SettingsManager.Current.SplitAttributeKeys ?? new List<string>()).ToList(),
                 CountXrefBlocks = _chkXref.Checked,
                 TemplateFilter = TemplateLibraryManager.IsFilterActive(template) ? template : null
@@ -1101,6 +1144,7 @@ namespace LHBBlockScheduler.UI
             s.CountParentBlocks = _chkCountParents.Checked;
             s.SplitByVisibility = _chkSplitVisibility.Checked;
             s.SplitByLayer = _chkSplitLayer.Checked;
+            s.SplitBySize = _chkSplitSize.Checked;
             s.CountXrefBlocks = _chkXref.Checked;
             SettingsManager.SaveSettings();
             TriggerReExtraction();
@@ -1274,9 +1318,18 @@ namespace LHBBlockScheduler.UI
             }
         }
 
-        /// <summary>Dòng đang có chứa cùng loại block (tên + chủng loại, cùng layer nếu tách theo layer).</summary>
+        /// <summary>
+        /// Dòng đang có chứa cùng loại block. v9.6: so theo khoá gom dòng lúc quét (tên + chủng loại + layer + kích thước +
+        /// thuộc tính tách dòng) - trước đây chỉ tên + chủng loại (+ layer), bật tách theo kích thước / thuộc tính thì
+        /// block quét thêm bị cộng nhầm vào dòng khác kích thước.
+        /// </summary>
         private BlockItem FindRowFor(BlockItem n)
         {
+            var groupKeys = new HashSet<string>((n.Instances ?? new List<BlockInstanceRef>()).Select(i => i.GroupKey).Where(k => !string.IsNullOrEmpty(k)),
+                                                StringComparer.OrdinalIgnoreCase);
+            if (groupKeys.Count > 0)
+                return _allItems.FirstOrDefault(r => r.Instances != null && r.Instances.Any(i => i.GroupKey != null && groupKeys.Contains(i.GroupKey)));
+
             var keys = new HashSet<string>((n.Instances ?? new List<BlockInstanceRef>()).Select(i => i.Key), StringComparer.OrdinalIgnoreCase);
             if (keys.Count == 0) return null;
             return _allItems.FirstOrDefault(r =>
@@ -1580,6 +1633,9 @@ namespace LHBBlockScheduler.UI
             primary.DisplayName = newName;
             primary.IsMergedGroup = true;
 
+            // v9.6: gộp các dòng khác kích thước -> cột Kích thước ghi các kích thước (không để kích thước của dòng đầu)
+            primary.Size = DynamicParamText.GroupSize(selected.Select(x => x.Size), int.MaxValue);
+
             RecomputeDuplicates(() =>
             {
                 for (int i = 1; i < selected.Count; i++)
@@ -1725,6 +1781,7 @@ namespace LHBBlockScheduler.UI
             VietnameseHelper.Fold(item.BlockName).Contains(foldedKey)
             || VietnameseHelper.Fold(item.DisplayName).Contains(foldedKey)
             || VietnameseHelper.Fold(item.VisibilityState).Contains(foldedKey)
+            || VietnameseHelper.Fold(item.Size).Contains(foldedKey)
             || VietnameseHelper.Fold(item.Unit).Contains(foldedKey)
             || VietnameseHelper.Fold(item.Note).Contains(foldedKey)
             || VietnameseHelper.Fold(item.LayerName).Contains(foldedKey);
@@ -1742,6 +1799,7 @@ namespace LHBBlockScheduler.UI
                 case "colBlockName": keySelector = x => x.BlockName; break;
                 case "colDisplayName": keySelector = x => x.DisplayName ?? x.BlockName; break;
                 case "colVisibility": keySelector = x => x.VisibilityState ?? ""; break;
+                case "colSize": keySelector = x => DynamicParamText.SizeSortKey(x.Size); break;
                 case "colBlockKind": keySelector = x => x.BlockKind ?? ""; break;
                 case "colUnit": keySelector = x => x.Unit ?? ""; break;
                 case "colCount": keySelector = x => x.Count; break;

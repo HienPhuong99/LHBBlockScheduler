@@ -30,6 +30,7 @@
   (princ "\n  - LHBSCAN       : Mở giao diện Thống kê Block đầy đủ tính năng")
   (princ "\n  - LHBMAU        : Thư viện block mẫu (thêm / xoá / sắp xếp / chèn block mẫu)")
   (princ "\n  - LHBLENH       : Bảng danh sách lệnh, chạy lệnh, đổi phím tắt (mặc định gõ LHB)")
+  (princ "\n  - LHBKHOPCOT    : Khớp độ rộng cột bảng đã xuất theo chữ (như Excel)")
   (princ (strcat "\n  ---- PREMIUM" (if (vl-string-search "LHB_VERSION" *LHB_VERSION*) "" (strcat " (" *LHB_VERSION* ")")) " ----"))
   (princ "\n  - LHBKHUVUC     : Tầng / khu vực -> bảng có cột SL từng khu")
   (princ "\n  - LHBCAPNHAT    : Cập nhật bảng đã xuất sau khi sửa bản vẽ")

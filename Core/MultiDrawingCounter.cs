@@ -19,6 +19,8 @@ namespace LHBBlockScheduler.Core
         public string Unit { get; set; }
         public int Order { get; set; }
         public bool FromTemplate { get; set; }
+        /// <summary>v9.6: tên tham số số của block động không có Visibility (khớp block mẫu lưu từ bản cũ).</summary>
+        public ICollection<string> NumericParamNames { get; set; }
         /// <summary>SL theo bản vẽ, key = nhãn bản vẽ.</summary>
         public Dictionary<string, int> Counts { get; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         public int Total => Counts.Values.Sum();
@@ -82,10 +84,11 @@ namespace LHBBlockScheduler.Core
                         string key = it.BlockName + "||" + (options.SplitByVisibility ? it.VisibilityState ?? "" : "");
                         if (!rows.TryGetValue(key, out var row))
                         {
-                            var entry = TemplateLibraryManager.Match(template, it.BlockName, it.VisibilityState);
+                            var entry = TemplateLibraryManager.Match(template, it.BlockName, it.VisibilityState, it.NumericParamNames);
                             row = new MultiRow
                             {
                                 Key = key,
+                                NumericParamNames = it.NumericParamNames,
                                 BlockName = it.BlockName,
                                 VisibilityState = options.SplitByVisibility ? it.VisibilityState : "",
                                 DisplayName = it.DisplayName ?? it.BlockName,

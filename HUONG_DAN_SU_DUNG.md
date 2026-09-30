@@ -89,6 +89,27 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 - Chuyển sang bản vẽ khác: cửa sổ thống kê **tự ẩn**, quay lại bản vẽ đó thì hiện lại; đóng bản vẽ thì cửa sổ tự đóng.
 - **Xuất bảng** chèn vào không gian đang làm việc: đang ở **Layout** thì bảng nằm trên Layout (hỏi dùng tỉ lệ 1 cho giấy).
 
+### Chủng loại, kích thước của block động (từ v9.6)
+
+- Cột **Chủng loại** = trạng thái **Visibility** của block động (vd `2 HƯỚNG`, `BỘT ABC 8KG`). Block động không có Visibility
+  thì lấy tham số dạng chữ (Lookup...). Tham số **độ dài / rộng / cao, góc xoay, toạ độ, lật** (`Distance1`, `Angle1`,
+  `Position1 X`, `Flip state1`...) **không** làm chủng loại → đầu báo tia chiếu kéo dài bao nhiêu cũng chung 1 dòng, chủng loại trống.
+- Ô **Tách theo kích thước** (hàng 2, mặc định tắt): bật → mỗi độ dài khác nhau thành 1 dòng riêng, hiện thêm cột
+  **Kích thước** (vd `12320`; 2 tham số: `1200 x 600`), bảng xuất CAD / Excel có cột này. Tắt → không tách, ẩn cột.
+  Chỉ tính tham số độ dài (Linear, Polar, XY); không tính góc xoay và toạ độ điểm (vị trí nhãn...). Số làm tròn còn
+  khoảng 4 chữ số có nghĩa (12320.33 → `12320`, 12.3204 → `12.32`), đơn vị = đơn vị bản vẽ. Sửa được trong ô như cột chữ khác;
+  double-click tiêu đề cột để đổi tên (vd thành "Độ dài").
+- Các nút **Căn lề Trái / Giữa / Phải** chuyển lên hàng 1 (cạnh nút Premium).
+
+### Bảng xuất co giãn như Excel
+
+- Bảng kiểu **AutoCAD Table** co giãn được như Excel: chọn bảng → kéo **grip ▲ trên đầu cột** để đổi độ rộng; chữ dài tự
+  xuống dòng, dòng tự cao lên; ô ký hiệu tự co theo ô. Kéo grip ở góc phải để giãn cả bảng.
+- Độ rộng cột lúc xuất = vừa chữ dài nhất trong cột (như double-click mép cột Excel), rộng hơn nếu cột trên form được kéo rộng hơn.
+  Trên form: kéo mép tiêu đề cột để đổi rộng, **double-click mép cột** để vừa chữ.
+- Lệnh **`LHBKHOPCOT`** (từ v9.6, không cần Premium): chọn bảng hoặc Enter (mọi bảng LHB) → mỗi cột chữ khớp lại độ rộng theo
+  chữ đang có (sau khi sửa chữ trong bảng, sau `LHBCAPNHAT` thêm dòng tên dài...). Cột ký hiệu và tiêu đề gộp giữ nguyên.
+
 > Từ v9.1 chỉ còn **thư viện block mẫu** (bỏ thư viện thiết bị cũ: nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV). Thư viện cũ đã có dữ liệu được tự chuyển 1 lần thành bộ mẫu tên `TV cu <tên>` (vd `TV cu default`), chọn ở ô **Bộ block mẫu** nếu muốn dùng.
 
 ### Lệnh `LHBLEGEND` — Lấy bảng Legend có sẵn làm block mẫu
@@ -100,7 +121,9 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 ### Lệnh `LHBMAU` — Thư viện block mẫu
 
 1. Gõ `LHBMAU` (hoặc nút **Block mẫu...** trên cửa sổ thống kê) → hộp thoại **Thông tin block mẫu**.
-2. **Thêm từ bản vẽ**: quét chọn các block mẫu (mỗi tên block + chủng loại thành 1 dòng).
+2. **Thêm từ bản vẽ**: quét chọn các block mẫu (mỗi tên block + chủng loại thành 1 dòng). Block động chỉ có tham số độ dài / góc
+   (vd đầu báo tia chiếu) có chủng loại trống = khớp mọi kích thước. Từ v9.6, block mẫu thêm từ bản cũ có chủng loại dạng
+   `Distance1=47116.93...` tự để trống khi mở hộp thoại (nếu bản vẽ đang mở có block đó); lúc quét vẫn khớp đúng dù chưa sửa.
 3. **Double-click** ô để sửa **Tên thống kê**, **Ghi chú** (hoặc chọn ô rồi gõ luôn / bấm F2); **Đơn vị** click 1 lần là xổ danh sách. Nút **▲ ▼** đổi thứ tự (= thứ tự trong bảng xuất), **X** xoá 1 dòng.
 4. Xoá nhiều dòng: **Shift + click** chọn liền mạch, **Ctrl + click** chọn từng dòng, **Ctrl + A** chọn hết, rồi bấm phím **Delete** hoặc nút **Xoá dòng chọn**.
 5. **Lưu thông tin**. Thư viện lưu cạnh add-in: `ThuVienMau\<bộ>.json` + `<bộ>.dwg` (hình block). Chưa lưu thì bấm Thoát > No để bỏ mọi thay đổi.
@@ -228,6 +251,7 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 | `LHBRELOAD` | Nạp lại phiên bản mới nhất từ thư mục Runtime (dành cho Dev, không cần tắt CAD) |
 | `LHBLOG` | Mở file nhật ký ghi lỗi (log.txt) |
 | `LHBDUPCLEAR` | Xoá vòng đỏ và đường dẫn đánh dấu block trùng (layer `LHB_BLOCK_TRUNG`, không in) |
+| `LHBKHOPCOT` | Khớp độ rộng cột bảng AutoCAD Table đã xuất theo chữ (như double-click mép cột Excel) |
 | `LHBHELP` | In danh sách các lệnh khả dụng ra Command Line |
 | `LHBKHUVUC` | ⭐ Tầng / khu vực: bảng có cột SL từng khu |
 | `LHBCAPNHAT` | ⭐ Cập nhật bảng AutoCAD Table đã xuất sau khi sửa bản vẽ |

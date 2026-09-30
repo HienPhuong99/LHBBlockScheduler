@@ -127,6 +127,23 @@ namespace LHBBlockScheduler
         [CommandMethod("LHBCAPNHAT")]
         public void Premium_UpdateTables() => RunPremium("Cập nhật bảng", TableUpdater.RunCommand);
 
+        /// <summary>v9.6: khớp độ rộng cột bảng AutoCAD Table theo chữ trong cột (như double-click mép cột trong Excel).</summary>
+        [CommandMethod("LHBKHOPCOT")]
+        public void FitTableColumns()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                TableAutoFit.RunCommand(doc);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "LHBKHOPCOT");
+                doc.Editor.WriteMessage($"\nLỗi khớp cột bảng - xem chi tiết tại {Logger.GetLogFilePath()}");
+            }
+        }
+
         [CommandMethod("LHBNHIEUBV")]
         public void Premium_MultiDrawing() => RunPremium("Nhiều bản vẽ", doc => Application.ShowModelessDialog(new MultiDrawingDialog(doc)));
 

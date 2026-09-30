@@ -34,7 +34,8 @@ namespace LHBBlockScheduler.UI
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colPrefix", HeaderText = "Tiền tố", Width = 110 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "colStart", HeaderText = "Số bắt đầu", Width = 80 });
             foreach (var it in _items)
-                _grid.Rows.Add(true, (it.DisplayName ?? it.BlockName) + (string.IsNullOrEmpty(it.VisibilityState) ? "" : $" [{it.VisibilityState}]"),
+                _grid.Rows.Add(true, (it.DisplayName ?? it.BlockName) + (string.IsNullOrEmpty(it.VisibilityState) ? "" : $" [{it.VisibilityState}]") +
+                               (string.IsNullOrEmpty(it.Size) ? "" : $" - {it.Size}"),
                                it.Count, DeviceNumbering.SuggestPrefix(it), 1);
 
             var opts = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 76, Padding = new Padding(6), WrapContents = true };
