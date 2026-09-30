@@ -15,6 +15,11 @@ Bundle/**/Contents/
 # Khoá bí mật tạo mã kích hoạt: KHÔNG BAO GIỜ đưa lên repo
 *private_key*.xml
 LHB_KEYS/
+# Bản quyền v2 (v9.5): khoá ký ECDSA + sổ key (thông tin khách) - chỉ ở máy người bán / GitHub Secrets / nhánh sổ key
+LHB_SIGNING_KEY*
+*.pem
+LHB_KEY_LEDGER*
+lhb-ledger*.jsonl
 
 # Cấu hình công cụ cá nhân, file chẩn đoán
 .claude/

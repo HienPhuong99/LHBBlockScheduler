@@ -1,10 +1,34 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Công cụ tạo mã kích hoạt LHB Premium. CHỈ người bán dùng, KHÔNG đóng gói kèm add-in. -->
+  <!--
+    Công cụ cấp mã kích hoạt LHB Premium v2 (từ v9.5). CHỈ người bán dùng, KHÔNG đóng gói kèm add-in.
+    - net48       : LHBKeyGen.exe chạy thẳng trên Windows 10/11 (có sẵn .NET Framework 4.8), double-click ra menu.
+    - net8.0      : chạy trên Linux / GitHub Actions (workflow .github/workflows/lhb-cap-key.yml) và máy có .NET 8.
+    Định dạng key + mã máy + khoá công khai dùng CHUNG file với add-in (Core/LicenseCodec.cs, Core/MachineFingerprint.cs,
+    Core/LicensePolicy.cs) -> key tạo ra chắc chắn khớp cách add-in kiểm tra.
+  -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>LHBKeyGen</AssemblyName>
     <RootNamespace>LHBKeyGen</RootNamespace>
+    <Version>2.0.0</Version>
+    <InvariantGlobalization Condition="'$(TargetFramework)' == 'net8.0'">false</InvariantGlobalization>
+    <!-- Mã chỉ chạy Windows (registry, SMBIOS, clip.exe) đã tự bắt lỗi khi chạy Linux -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Core\LicenseCodec.cs" Link="Shared\LicenseCodec.cs" />
+    <Compile Include="..\..\Core\LicensePolicy.cs" Link="Shared\LicensePolicy.cs" />
+    <Compile Include="..\..\Core\MachineFingerprint.cs" Link="Shared\MachineFingerprint.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.Runtime.Serialization" />
+    <!-- Chỉ để build bản net48 trên máy không có .NET Framework Developer Pack (Linux / CI), không vào file exe -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

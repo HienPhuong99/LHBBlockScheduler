@@ -36,7 +36,10 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (30/09/2026): bản v9.4 Premium "ổn định" đã phát hành, CHƯA có kết quả test (v9 – v9.3 cũng chưa)
+## Trạng thái (30/09/2026): bản v9.5 Premium (bản quyền v2, ĐÃ BẬT bản quyền) đã phát hành, CHƯA có kết quả test (v9 – v9.4 cũng chưa)
+v9.5 làm ở phiên cloud, PR mới từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
+Zip v9.5 gửi user là bản build cloud (MD5 `D1626C1147BC58F3AC0FED232D10BC95`); nếu build lại trên máy dev bằng libs\ như v9.4
+thì MD5 đổi -> sửa MD5 trong `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md` + dòng v9.5 bên dưới.
 v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.
 Zip phát hành build lại trên máy dev bằng libs\ -> MD5 DLL `5F5B53084349716CB7D9A6FF4054DE30` (bản build cloud MD5
 `DA84C6DB97E8BFAFD4437EE1A1302C6C` không phát hành). Zip + hướng dẫn test cũng chép vào `C:\Users\vsp\Downloads\tool\` như các bản cũ.
@@ -50,6 +53,37 @@ Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/
 -p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
 PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
 tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
+MD5 DLL phụ thuộc cả commit đang đứng: SDK .NET 8 nhúng SourceLink (URL + mã commit) vào PDB -> mã PDB nằm trong DLL. Build bản
+phát hành từ commit đã chốt mã, rồi commit riêng phần cập nhật MD5 trong tài liệu (v9.5: DLL build tại commit 795f1a1).
+Bản quyền + cấp key (30/09/2026): `docs/BAN_QUYEN_VA_CAP_KEY.md` (thiết kế, mức an toàn, quy trình cấp / thu hồi / xoay khoá).
+v9.5 Premium (MD5 `D1626C1147BC58F3AC0FED232D10BC95`, `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md`) = v9.4 + bản quyền v2
+(user 30/09: "bảo mật hơn + cấp 1 key trọn đời để share đồng nghiệp review + hệ thống gen key"):
+- `LicenseManager.Enforced = true`: Premium dùng thử 30 ngày rồi cần key. Tính năng thường không cần key.
+- Key `LHB2-` + Base32 (bỏ I O 0 1) nhóm 5: payload 26 byte + nhãn "cấp cho" ≤ 48 byte UTF-8 + chữ ký ECDSA P-256/SHA-256 64 byte
+  trên "LHB-LICENSE-V2|"+payload (`Core/LicenseCodec.cs`, DÙNG CHUNG add-in + keygen + tests). Loại Machine / Floating / Review,
+  kid (xoay khoá), serial (thu hồi), gói tính năng (bit Premium). Parse bỏ khoảng trắng, mọi dấu gạch (Pd), ký tự Cf, thử từng
+  chỗ "LHB2" trong chuỗi dán, độ dài key tính từ byte độ dài nhãn (chữ dính sau key bỏ qua). Mã `LHB1.` (v9 - v9.4) báo không dùng nữa.
+- `Core/LicensePolicy.cs` (dùng chung): `TrustedKeys` (kid -> base64 X|Y khoá CÔNG KHAI; kid 1 tạo 30/09 trong phiên cloud),
+  `RevokedSerials`, `AcceptReviewKeys`, `Validate` (thứ tự: định dạng, kid, chữ ký, thu hồi, review, mã máy, hạn, Premium).
+  Thêm kid / thu hồi = sửa file này + build bản mới (bản cũ offline vẫn nhận key cũ).
+- `Core/MachineFingerprint.cs`: mã máy = 10 byte SHA-256("LHB-HW-V2|" + UUID SMBIOS loại 1 qua GetSystemFirmwareTable 'RSMB'),
+  UUID rác -> MachineGuid -> tên máy + user. Hiện "XXXX-XXXX-XXXX-XXXX" + nguồn.
+- `Core/TrialLogic.cs` (hàm thuần) + `LicenseManager.TrialStore`: 17 byte (ngày bắt đầu / dùng gần nhất, HMAC-SHA256 khoá theo mã máy)
+  ở registry HKCU\Software\LHBBlockScheduler "P2" + %LOCALAPPDATA%\LHBBlockScheduler\p2.dat; bắt đầu sớm nhất, tự ghi lại nơi thiếu,
+  sai HMAC -> hết hạn, lùi đồng hồ > 1 ngày -> tạm 0; lỗi IO -> cho 1 ngày (không khoá oan). Tên mới -> máy chạy v9 - v9.2 đủ 30 ngày.
+- `UI/LicenseDialog.cs` (LHBBANQUYEN): mã máy + nguồn, chi tiết key, Xoá mã. `LHBDIAG` mục 3a. BẢN QUYỀN. Log `[License]`.
+- Key review trọn đời đã cấp: serial `64F68B85`, kid 1, "Nhóm review LHB 2026" (chuỗi key KHÔNG nằm trong repo, gửi user file
+  KEY_REVIEW_LHB.txt). Lộ -> `LHBKeyGen revoke 64F68B85` + thêm vào RevokedSerials, hoặc AcceptReviewKeys = false.
+- `tools/LHBKeyGen` v2 (net48 exe + net8.0): menu tiếng Việt + lệnh init/protect/pubkey/issue/verify/list/revoke/export-csv/machine,
+  `KeyFile.cs` (file khoá text, mật khẩu tuỳ chọn PBKDF2 600k + AES-256-CBC + HMAC), `Ledger.cs` (sổ JSONL). README trong thư mục.
+  `.github/workflows/lhb-cap-key.yml`: workflow_dispatch issue/verify/revoke/list, secret `LHB_SIGNING_KEY` (+ `LHB_KEY_PASSPHRASE`),
+  sổ key ở nhánh orphan `lhb-license-ledger`, input qua env (chống chèn lệnh). Cần merge vào main mới hiện ở tab Actions.
+  `tests/LHBLicenseTests` (net8.0, 63 kiểm tra, `LHB_TEST_REAL_KEY` = kiểm key thật). Chạy: `dotnet run --project tests/LHBLicenseTests`.
+- BÍ MẬT (KHÔNG BAO GIỜ commit, .gitignore chặn `LHB_SIGNING_KEY*`, `LHB_KEY_LEDGER*`): khoá ký `LHB_SIGNING_KEY_kid1.txt` + sổ
+  `LHB_KEY_LEDGER.jsonl` đã gửi user (zip LHB_KEYS_v2_BI_MAT_20260930.zip) -> để ở `C:\Users\vsp\Downloads\tool\LHB_KEYS\`.
+  Khuyên user tạo kid 2 trên máy mình trước khi bán (chỉ gửi Claude dòng khoá công khai để thêm vào TrustedKeys).
+Cần xác nhận khi có kết quả test v9.5: nguồn mã máy = SMBIOS-UUID và ổn định qua khởi động lại; ECDSA (CNG) chạy trong acad.exe
+(log `[License] Kiểm mã serial ...: HỢP LỆ`); dùng thử tự ghi lại khi xoá P2; kích hoạt key review.
 v9.4 Premium (MD5 phát hành `5F5B53084349716CB7D9A6FF4054DE30`, `Dist\HUONG_DAN_TEST_20260929_v9.4_Premium.md`) = v9.3 + sửa P0/P1 của
 review (user 29/09: "Sửa trước những lỗi đã phát hiện và tồn đọng"):
 - A1-A5 `BlockExtractor` viết lại phần duyệt: `Classify` -> Table (bỏ), Xref (bỏ, hoặc vỏ trong suốt khi
@@ -87,10 +121,9 @@ Cần xác nhận khi có kết quả test v9.4: ARRAY/MINSERT/XREF đếm đún
 bản vẽ không lỗi; ảnh tương đối `.\<DWG>_LHBImages\` nạp được (log `[TableExporter] Ảnh ...`); bảng trên Layout +
 LHBCAPNHAT; `AssocArray.IsAssociativeArray` chạy (không thì ARRAY vẫn đếm nhưng ghi "ẩn danh").
 v9.3 Premium (MD5 `D3E5A61DB704B975DB5D97ADD35CABC6`, `Dist\HUONG_DAN_TEST_20260929_v9.3_Premium.md`) = v9.2 + CHƯA BẮT
-BẢN QUYỀN (user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"): `LicenseManager.Enforced = false`
--> IsLicensed luôn true, TrialDaysLeft không đụng registry, StatusText "Premium miễn phí...". Không làm key chung (mã gắn
-mã máy, key chung = lộ khoá bí mật). KHI USER BẢO BẮT BẢN QUYỀN: đặt Enforced = true, build bản mới; cân nhắc đổi tên giá
-trị registry PremiumTrialStart (máy test v9-v9.2 đã ghi ngày dùng thử từ 29/09/2026) để 30 ngày tính từ lúc bật.
+BẢN QUYỀN (user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"): `LicenseManager.Enforced = false`.
+(Đã bật lại ở v9.5 cùng bản quyền v2: key dùng chung giờ làm được an toàn vì add-in chỉ giữ khoá công khai; dùng thử đổi
+sang giá trị registry "P2" nên máy test v9 - v9.2 vẫn đủ 30 ngày.)
 v9.2 Premium (MD5 `A841B41AFBE6346399F2478603D31F4C`, `Dist\HUONG_DAN_TEST_20260929_v9.2_Premium.md`) = v9.1 + sửa ô
 Ký hiệu không đều (ảnh test v8: EXIT "CHỈ LỐI THOÁT NẠN" tỉ lệ ~2.4:1 phóng gần kín ô rộng ~2.3 x chiều cao dòng).
 Kết luận từ ảnh: lề ô "vuông" của v7 (`cell.Borders.X.Margin`) KHÔNG giới hạn AutoFit -> AutoFit co khung bao block vào
@@ -141,9 +174,9 @@ User giao tự làm hết 13 tính năng, không hỏi, không demo. Thiết k�
   `Core/ExcelExporter.cs`. P10 `Core/TableTemplate.cs` (settings TableTemplates; tên trùng
   Autodesk.AutoCAD.DatabaseServices.TableTemplate -> file UI dùng alias). Bảng lưới chung: `TableExporterAcad.ExportGrid`.
 - P11 `UI/RibbonBuilder.cs` gọi AdWindows qua reflection (không có AdWindows.dll trong libs), chờ Application.Idle,
-  tạo lại khi đổi WSCURRENT; `UI/LhbPalette.cs` (PaletteSet). P13 `Core/LicenseManager.cs`: RSA-1024 SHA256, mã máy =
-  SHA256(MachineGuid) 10 byte, dùng thử 30 ngày (registry PremiumTrialStart). Keygen `tools/LHBKeyGen`, khoá bí mật +
-  exe ở `C:\Users\vsp\Downloads\tool\LHB_KEYS\` (NGOÀI repo, không bao giờ commit). Đã test tạo / kiểm mã ngoài CAD.
+  tạo lại khi đổi WSCURRENT; `UI/LhbPalette.cs` (PaletteSet). P13 `Core/LicenseManager.cs`: (v9 - v9.4) RSA-1024, mã máy =
+  SHA256(MachineGuid), mã LHB1 - THAY bằng bản quyền v2 từ v9.5 (xem mục v9.5). Khoá bí mật + exe keygen ở
+  `C:\Users\vsp\Downloads\tool\LHB_KEYS\` (NGOÀI repo, không bao giờ commit).
 - Lệnh mới: LHBKHUVUC, LHBCAPNHAT, LHBNHIEUBV, LHBCHIEUDAI, LHBSOATLOI, LHBDANHSO, LHBVUNGBV, LHBTHAYBLOCK,
   LHBMAUBANG, LHBPALETTE, LHBRIBBON, LHBBANQUYEN (lệnh chạy riêng quét bằng `ExtractFromSelection(remember:false)`
   để không đè vùng chọn của form).

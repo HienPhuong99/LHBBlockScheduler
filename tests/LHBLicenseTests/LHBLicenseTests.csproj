@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Kiểm thử bản quyền v2 ngoài AutoCAD: dùng ĐÚNG file nguồn của add-in (Core/License*.cs, TrialLogic, MachineFingerprint)
+    và của LHBKeyGen (KeyFile). Chạy: cd tests/LHBLicenseTests rồi dotnet run -c Release (mã thoát 0 = đạt hết).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\LicenseCodec.cs" Link="Shared\LicenseCodec.cs" />
+    <Compile Include="..\..\Core\LicensePolicy.cs" Link="Shared\LicensePolicy.cs" />
+    <Compile Include="..\..\Core\MachineFingerprint.cs" Link="Shared\MachineFingerprint.cs" />
+    <Compile Include="..\..\Core\TrialLogic.cs" Link="Shared\TrialLogic.cs" />
+    <Compile Include="..\..\tools\LHBKeyGen\KeyFile.cs" Link="Shared\KeyFile.cs" />
+  </ItemGroup>
+</Project>

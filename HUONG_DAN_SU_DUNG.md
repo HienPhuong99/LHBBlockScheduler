@@ -120,7 +120,15 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 
 ## ⭐ Tính năng Premium (từ v9)
 
-Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Từ v9.3 **miễn phí, không cần mã kích hoạt** (chưa bật bản quyền). Khi bật bản quyền: dùng thử 30 ngày, sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
+Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Từ v9.5 **đã bật bản quyền**: dùng thử Premium 30 ngày (tính từ lần đầu nạp v9.5), sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
+
+### Kích hoạt bản quyền (`LHBBANQUYEN`)
+1. Gõ `LHBBANQUYEN`. Dòng đậm là trạng thái: "Dùng thử Premium: còn N ngày" / "Đã kích hoạt Premium (...)" / "Hết hạn dùng thử...".
+2. **Mua key theo máy:** bấm **Chép mã máy**, gửi mã `XXXX-XXXX-XXXX-XXXX` cho người bán. Cài lại Windows không đổi mã máy; thay bo mạch chủ thì đổi.
+3. Nhận key dạng `LHB2-...` → dán vào ô Mã kích hoạt (xuống dòng, dấu cách không sao) → **Kích hoạt**.
+   Key dùng chung / key review (nhóm review) không cần gửi mã máy, dán là dùng.
+4. **Xoá mã** để gỡ key khỏi máy (vd trước khi chuyển máy). Key báo lỗi thì đọc câu báo (chép thiếu, máy khác, hết hạn...) hoặc gửi `LHBDIAG` (mục 3a).
+5. Tính năng thường (quét, xuất bảng, block mẫu, tìm trùng...) không cần key.
 
 ### Thống kê theo tầng / khu vực (`LHBKHUVUC`)
 1. Vẽ polyline kín bao từng tầng / khu (nên có chữ tên khu bên trong).
@@ -232,5 +240,5 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 | `LHBMAUBANG` | ⭐ Mẫu bảng xuất |
 | `LHBPALETTE` | Bật / tắt bảng công cụ LHB dock cạnh màn hình |
 | `LHBRIBBON` | Bật / tắt tab Ribbon LHB Premium |
-| `LHBBANQUYEN` | Mã máy, kích hoạt bản quyền Premium |
+| `LHBBANQUYEN` | Mã máy, kích hoạt / xoá mã bản quyền Premium (`LHB2-...`) |
 

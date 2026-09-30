@@ -1,0 +1,127 @@
+name: LHB - Cấp key bản quyền
+
+# Chạy tay: tab Actions > "LHB - Cấp key bản quyền" > Run workflow (điện thoại: app GitHub > repo > Actions).
+# Cần secret LHB_SIGNING_KEY = toàn bộ nội dung file LHB_SIGNING_KEY_kid1.txt
+#   (repo Settings > Secrets and variables > Actions > New repository secret).
+#   File khoá có mật khẩu (LHBKeyGen protect) -> thêm secret LHB_KEY_PASSPHRASE = mật khẩu đó.
+# Workflow chỉ hiện ở tab Actions khi file này đã có trên nhánh mặc định (main).
+# Sổ key (thông tin khách) lưu ở nhánh riêng "lhb-license-ledger", không lẫn vào mã nguồn.
+# Key hiện trong mục Summary của lần chạy. Hướng dẫn đầy đủ: docs/BAN_QUYEN_VA_CAP_KEY.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Việc cần làm: issue = cấp key | verify = kiểm key | revoke = thu hồi | list = xem sổ key'
+        type: choice
+        options: [issue, verify, revoke, list]
+        default: issue
+      kind:
+        description: 'Loại key khi cấp: machine = theo máy | floating = dùng chung | review = review dùng chung'
+        type: choice
+        options: [machine, floating, review]
+        default: machine
+      machine:
+        description: 'Mã máy khách gửi (XXXX-XXXX-XXXX-XXXX) - key theo máy. Khi verify: kiểm thêm mã máy'
+        required: false
+        default: ''
+      label:
+        description: 'Cấp cho (tên khách / công ty) - hiện trong LHBBANQUYEN, tối đa khoảng 40 ký tự'
+        required: false
+        default: ''
+      expires:
+        description: 'Hạn: never = trọn đời | +365 = 365 ngày | 2027-12-31'
+        required: false
+        default: 'never'
+      note:
+        description: 'Ghi chú nội bộ (SĐT, số đơn...) - chỉ lưu trong sổ, không nằm trong key. Khi thu hồi: lý do'
+        required: false
+        default: ''
+      target:
+        description: 'verify: dán key LHB2-... | revoke: serial 8 ký tự | list: chữ cần tìm'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lhb-license-ledger
+  cancel-in-progress: false
+
+jobs:
+  key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LEDGER_BRANCH: lhb-license-ledger
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build LHBKeyGen
+        run: dotnet build tools/LHBKeyGen/LHBKeyGen.csproj -c Release -f net8.0 -o "$RUNNER_TEMP/keygen"
+
+      - name: Mở sổ key (nhánh lhb-license-ledger)
+        run: |
+          git config user.name "lhb-license-bot"
+          git config user.email "lhb-license-bot@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin "$LEDGER_BRANCH" > /dev/null; then
+            git fetch --depth 1 origin "+refs/heads/$LEDGER_BRANCH:refs/remotes/origin/$LEDGER_BRANCH"
+            git worktree add -B "$LEDGER_BRANCH" ledger "origin/$LEDGER_BRANCH"
+          else
+            git worktree add --detach ledger
+            cd ledger
+            git checkout --orphan "$LEDGER_BRANCH"
+            git rm -rf --quiet .
+            printf '# Sổ key LHB Premium (tự động)\n\nMỗi dòng lhb-ledger.jsonl = 1 key đã cấp. Không sửa tay.\n' > README.md
+            printf '*.bak\n*.tmp\n' > .gitignore
+          fi
+
+      - name: Chạy LHBKeyGen
+        env:
+          # Input đưa qua biến môi trường (không chèn thẳng vào lệnh) để chữ khách nhập không chạy được thành lệnh
+          LHB_SIGNING_KEY: ${{ secrets.LHB_SIGNING_KEY }}
+          LHB_KEY_PASSPHRASE: ${{ secrets.LHB_KEY_PASSPHRASE }}
+          ACTION: ${{ inputs.action }}
+          KIND: ${{ inputs.kind }}
+          MACHINE: ${{ inputs.machine }}
+          LABEL: ${{ inputs.label }}
+          EXPIRES: ${{ inputs.expires }}
+          NOTE: ${{ inputs.note }}
+          TARGET: ${{ inputs.target }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          KG="dotnet $RUNNER_TEMP/keygen/LHBKeyGen.dll"
+          LEDGER="ledger/lhb-ledger.jsonl"
+          case "$ACTION" in
+            issue)
+              if [ -z "$LHB_SIGNING_KEY" ]; then echo "::error::Chưa có secret LHB_SIGNING_KEY (xem docs/BAN_QUYEN_VA_CAP_KEY.md)"; exit 1; fi
+              $KG issue --key-env LHB_SIGNING_KEY --kind "$KIND" --machine "$MACHINE" --label "$LABEL" --expires "$EXPIRES" \
+                --note "$NOTE" --ledger "$LEDGER" --by "github:$ACTOR" --no-clip --summary "$GITHUB_STEP_SUMMARY" ;;
+            verify)
+              $KG verify "$TARGET" --machine "$MACHINE" --ledger "$LEDGER" --summary "$GITHUB_STEP_SUMMARY" ;;
+            revoke)
+              $KG revoke "$TARGET" --reason "$NOTE" --ledger "$LEDGER" --summary "$GITHUB_STEP_SUMMARY" ;;
+            list)
+              $KG list --find "$TARGET" --ledger "$LEDGER" --summary "$GITHUB_STEP_SUMMARY" ;;
+          esac
+
+      - name: Lưu sổ key
+        if: inputs.action == 'issue' || inputs.action == 'revoke'
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          cd ledger
+          # Chỉ đưa sổ lên (không đưa file .bak / .tmp khi ghi sổ)
+          for f in lhb-ledger.jsonl README.md .gitignore; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
+          if git diff --cached --quiet; then echo "Sổ key không đổi"; exit 0; fi
+          git commit -q -m "LHB key: $ACTION $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin "HEAD:$LEDGER_BRANCH"
