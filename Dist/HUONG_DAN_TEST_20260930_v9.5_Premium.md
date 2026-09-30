@@ -1,7 +1,7 @@
 # Hướng dẫn test LHBBlockScheduler — bản 30/09/2026 (v9.5 Premium — bản quyền v2)
 
 **File cần nhận:** `LHBBlockScheduler_20260930_v9.5_Premium.zip` + `KEY_REVIEW_LHB.txt` (key review, gửi riêng)
-**MD5 DLL đúng:** `56815A5A1FA70643F65A97B3CE8C4C47`
+**MD5 DLL đúng:** `D1626C1147BC58F3AC0FED232D10BC95`
 **Máy test:** AutoCAD 2021 (chạy được AutoCAD 2021 – 2024; 2025 trở lên chưa hỗ trợ)
 
 v9.5 = v9.4 "ổn định" (sửa đếm ARRAY / MINSERT / XREF, form theo bản vẽ...) + **bản quyền v2, đã BẬT bản quyền**:
@@ -29,7 +29,7 @@ Làm bước 1 – 5 **trước** khi nhập key (để thấy chế độ dùng
 
 | # | Thao tác | Kết quả đúng |
 |---|---|---|
-| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD, kéo thả `LHB.lsp`. Gõ `LHBVERSION` | MD5 = `56815A5A1FA70643F65A97B3CE8C4C47`. Dòng lệnh lúc nạp: `[LHB] v9.5 Premium - Dùng thử Premium: còn 30 ngày. Tab Ribbon...` |
+| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD, kéo thả `LHB.lsp`. Gõ `LHBVERSION` | MD5 = `D1626C1147BC58F3AC0FED232D10BC95`. Dòng lệnh lúc nạp: `[LHB] v9.5 Premium - Dùng thử Premium: còn 30 ngày. Tab Ribbon...` |
 | 2 | Gõ `LHBBANQUYEN` | Dòng đậm màu cam `Dùng thử Premium: còn 30 ngày`, dòng xám `Chưa nhập mã kích hoạt.` Mã máy dạng `XXXX-XXXX-XXXX-XXXX` (không có chữ I, O, số 0, 1). `Nguồn mã máy: UUID bo mạch chủ (cài lại Windows không đổi mã)`. Bấm **Chép mã máy** → nút đổi thành `Đã chép`, dán vào Notepad đúng mã |
 | 3 | Đóng hộp thoại. Gõ `LHBKHUVUC` (hoặc tính năng Premium bất kỳ) | Chạy bình thường. Dòng lệnh 1 lần: `[LHB Premium] Đang dùng thử, còn 30 ngày. Gõ LHBBANQUYEN để kích hoạt.` |
 | 4 | Tắt / mở lại AutoCAD, kéo thả `LHB.lsp`, `LHBBANQUYEN` | Mã máy **giống hệt** bước 2, vẫn `còn 30 ngày` |

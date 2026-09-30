@@ -38,7 +38,7 @@
 
 ## Trạng thái (30/09/2026): bản v9.5 Premium (bản quyền v2, ĐÃ BẬT bản quyền) đã phát hành, CHƯA có kết quả test (v9 – v9.4 cũng chưa)
 v9.5 làm ở phiên cloud, PR mới từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
-Zip v9.5 gửi user là bản build cloud (MD5 `56815A5A1FA70643F65A97B3CE8C4C47`); nếu build lại trên máy dev bằng libs\ như v9.4
+Zip v9.5 gửi user là bản build cloud (MD5 `D1626C1147BC58F3AC0FED232D10BC95`); nếu build lại trên máy dev bằng libs\ như v9.4
 thì MD5 đổi -> sửa MD5 trong `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md` + dòng v9.5 bên dưới.
 v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.
 Zip phát hành build lại trên máy dev bằng libs\ -> MD5 DLL `5F5B53084349716CB7D9A6FF4054DE30` (bản build cloud MD5
@@ -53,8 +53,10 @@ Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/
 -p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
 PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
 tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
+MD5 DLL phụ thuộc cả commit đang đứng: SDK .NET 8 nhúng SourceLink (URL + mã commit) vào PDB -> mã PDB nằm trong DLL. Build bản
+phát hành từ commit đã chốt mã, rồi commit riêng phần cập nhật MD5 trong tài liệu (v9.5: DLL build tại commit 795f1a1).
 Bản quyền + cấp key (30/09/2026): `docs/BAN_QUYEN_VA_CAP_KEY.md` (thiết kế, mức an toàn, quy trình cấp / thu hồi / xoay khoá).
-v9.5 Premium (MD5 `56815A5A1FA70643F65A97B3CE8C4C47`, `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md`) = v9.4 + bản quyền v2
+v9.5 Premium (MD5 `D1626C1147BC58F3AC0FED232D10BC95`, `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md`) = v9.4 + bản quyền v2
 (user 30/09: "bảo mật hơn + cấp 1 key trọn đời để share đồng nghiệp review + hệ thống gen key"):
 - `LicenseManager.Enforced = true`: Premium dùng thử 30 ngày rồi cần key. Tính năng thường không cần key.
 - Key `LHB2-` + Base32 (bỏ I O 0 1) nhóm 5: payload 26 byte + nhãn "cấp cho" ≤ 48 byte UTF-8 + chữ ký ECDSA P-256/SHA-256 64 byte
