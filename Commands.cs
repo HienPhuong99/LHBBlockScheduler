@@ -548,6 +548,27 @@ namespace LHBBlockScheduler
             AppendDirStatus(sb, "Thư mục CustomImages", ThumbnailGenerator.CustomImagesFolder);
             sb.AppendLine();
 
+            // v9.5: bản quyền v2 - để hỗ trợ khách từ xa (mã máy, nguồn, key đang lưu, dùng thử)
+            sb.AppendLine("--- 3a. BẢN QUYỀN ---");
+            try
+            {
+                var lic = LicenseManager.Current;
+                sb.AppendLine($"Bắt bản quyền (Enforced)  : {LicenseManager.Enforced}");
+                sb.AppendLine($"Mã máy                   : {LicenseManager.MachineCode} (nguồn: {LicenseManager.MachineSource})");
+                sb.AppendLine($"Trạng thái               : {LicenseManager.StatusText}");
+                if (lic.Data != null)
+                    sb.AppendLine($"Key đang lưu             : serial {lic.Data.SerialText}, kid {lic.Data.KeyId}, {lic.Data.KindText}, cấp cho '{lic.Data.Label}', " +
+                                  $"cấp {lic.Data.Issued:dd/MM/yyyy}, hạn {(lic.Expiry.HasValue ? lic.Expiry.Value.ToString("dd/MM/yyyy") : "trọn đời")}" +
+                                  (lic.Data.Kind == LicenseKind.Machine ? $", mã máy trong key {lic.Data.MachineCode}" : ""));
+                if (!lic.Valid) sb.AppendLine($"Key không dùng được vì    : {lic.Error}");
+                if (!lic.Valid && LicenseManager.Enforced) sb.AppendLine($"Dùng thử còn             : {LicenseManager.TrialDaysLeft} ngày {LicenseManager.TrialProblem}");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"Lỗi đọc bản quyền: {ex.Message}");
+            }
+            sb.AppendLine();
+
             sb.AppendLine("--- 3b. PHÍM TẮT LỆNH (LHBLENH) ---");
             try
             {

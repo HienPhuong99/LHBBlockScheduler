@@ -4,8 +4,9 @@ Bản v9 Premium thêm 13 tính năng, tham khảo lệnh COUNT của AutoCAD 20
 
 Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím tắt...) vẫn miễn phí.
 
-> **Hiện tại (từ v9.3): Premium cũng miễn phí, chưa bật bản quyền** — mọi máy dùng full, không cần mã (`LicenseManager.Enforced = false`).
-> Khi bật bản quyền: tính năng Premium dùng thử **30 ngày**, sau đó cần mã kích hoạt (mục 13).
+> **Từ v9.5: đã bật bản quyền v2** — tính năng Premium dùng thử **30 ngày** (tính từ lần đầu nạp v9.5), sau đó cần mã kích hoạt `LHB2-...` (mục 13).
+> Có mã review trọn đời dùng chung cho nhóm review. v9.3 – v9.4: Premium miễn phí, không cần mã.
+> Thiết kế, mức an toàn, cách cấp / quản lý key: [`docs/BAN_QUYEN_VA_CAP_KEY.md`](docs/BAN_QUYEN_VA_CAP_KEY.md).
 
 ## Cách mở
 
@@ -32,7 +33,7 @@ Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím t�
 | 10 | Mẫu bảng xuất | `LHBMAUBANG` | Tiêu đề, dòng phụ (tên công trình), ẩn tiêu đề, dòng TỔNG CỘNG, header chữ hoa, font, cỡ chữ, màu nền header / tiêu đề. Lưu nhiều mẫu. Áp cho bảng CAD, Excel, bảng chiều dài, nhiều bản vẽ |
 | 11 | Ribbon + palette | `LHBRIBBON`, `LHBPALETTE` | Tab Ribbon "LHB Premium" 4 nhóm, 14 nút có icon. Palette dock cạnh màn hình cùng các nút + trạng thái bản quyền |
 | 12 | Thay block hàng loạt | `LHBTHAYBLOCK` | Chọn dòng trên form (hoặc quét chọn) → thay bằng block khác trong bản vẽ / block mẫu. Giữ điểm chèn, góc, layer, thuộc tính cùng tag; co tỉ lệ theo kích thước cũ; chọn chủng loại block đích. Ctrl+Z hoàn tác |
-| 13 | Bản quyền | `LHBBANQUYEN` | Hiện mã máy. Dán mã kích hoạt để dùng Premium sau 30 ngày dùng thử |
+| 13 | Bản quyền | `LHBBANQUYEN` | Hiện mã máy (UUID bo mạch chủ) + nguồn. Dán mã `LHB2-...` → **Kích hoạt**: hiện loại key (theo máy / dùng chung / review), cấp cho ai, serial, hạn. Nút **Xoá mã**. `LHBDIAG` mục 3a ghi trạng thái bản quyền |
 
 ## Giới hạn cần biết
 
@@ -44,12 +45,14 @@ Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím t�
 
 ## Tạo mã kích hoạt (chỉ người bán)
 
-1. Khách gõ `LHBBANQUYEN`, bấm **Chép mã máy**, gửi mã dạng `XXXX-XXXX-XXXX-XXXX`.
-2. Trên máy người bán chạy:
-   ```
-   LHBKeyGen.exe XXXX-XXXX-XXXX-XXXX 365
-   ```
-   `365` = số ngày dùng, `0` = vĩnh viễn. `LHBKeyGen.exe` và khoá bí mật `LHB_private_key.xml` nằm trong thư mục `LHB_KEYS` (ngoài mã nguồn, **không đưa lên GitHub, không gửi khách**).
-3. Gửi khách chuỗi `LHB1.xxxx...`. Khách dán vào `LHBBANQUYEN` → **Kích hoạt**.
+Từ v9.5 dùng **LHBKeyGen v2** (`tools/LHBKeyGen`, hướng dẫn [`tools/LHBKeyGen/README.md`](tools/LHBKeyGen/README.md)). Mã `LHB1.` và `LHBKeyGen.exe` cũ của v9 – v9.4 không còn dùng.
 
-Mất file khoá bí mật thì không tạo được mã mới cho bản đã phát hành: sao lưu thư mục `LHB_KEYS`.
+1. Khách gõ `LHBBANQUYEN`, bấm **Chép mã máy**, gửi mã dạng `XXXX-XXXX-XXXX-XXXX` (key dùng chung / review không cần).
+2. Cấp key bằng 1 trong 3 cách:
+   - Double-click `LHBKeyGen.exe` (cạnh file khoá ký `LHB_SIGNING_KEY_kid*.txt`) → menu **1** (theo máy) hoặc **2** (dùng chung / review).
+   - GitHub: tab **Actions** → **LHB - Cấp key bản quyền** → **Run workflow** (key hiện ở Summary).
+   - Nhắn Claude Code: "cấp key theo máy cho ..., mã máy ..., hạn ..." (chạy workflow GitHub).
+3. Gửi khách chuỗi `LHB2-...` (dạng tin nhắn / file .txt). Khách dán vào `LHBBANQUYEN` → **Kích hoạt**.
+
+File khoá ký **không bao giờ** đưa lên GitHub (trừ ô Secrets) hay gửi khách. Mất file khoá = không cấp được key cho các bản đang nhận
+khoá đó → sao lưu 2 nơi. Thu hồi key / thay khoá ký có hiệu lực từ bản add-in build sau (xem `docs/BAN_QUYEN_VA_CAP_KEY.md`).

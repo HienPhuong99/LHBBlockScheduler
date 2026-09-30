@@ -1,6 +1,5 @@
 using System;
-using System.Globalization;
-using System.Linq;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Win32;
@@ -8,104 +7,112 @@ using Microsoft.Win32;
 namespace LHBBlockScheduler.Core
 {
     /// <summary>
-    /// Bản quyền Premium (P13). Mã máy = 10 byte đầu SHA-256 của MachineGuid Windows, hiện dạng XXXXX-XXXXX-XXXXX-XXXXX.
-    /// Mã kích hoạt = "LHB1." + base64url( mã máy 10 byte | hạn dùng 2 byte (số ngày từ 01/01/2020, 0 = vĩnh viễn)
-    /// | bản 1 byte | chữ ký RSA-SHA256 ). Chỉ người giữ khoá bí mật (LHB_private_key.xml, KHÔNG nằm trong mã nguồn)
-    /// mới tạo được mã, bằng tools\LHBKeyGen. Chưa kích hoạt: dùng thử Premium 30 ngày tính từ lần dùng đầu.
-    /// Tính năng bản thường (quét, xuất bảng, block mẫu...) không cần mã.
+    /// Bản quyền Premium v2 (từ v9.5; v9 - v9.4 dùng RSA-1024 + MachineGuid, mã "LHB1." không còn nhận).
+    ///  - Mã kích hoạt "LHB2-..." ký ECDSA P-256 (Core/LicenseCodec.cs). Add-in chỉ giữ khoá CÔNG KHAI (Core/LicensePolicy.cs):
+    ///    kiểm được, không tạo được key. Nhiều khoá ký theo kid, danh sách serial thu hồi, bật / tắt nhận key review.
+    ///  - 3 loại key: theo máy (mã máy = UUID bo mạch chủ, Core/MachineFingerprint.cs), dùng chung, review (dùng chung).
+    ///  - Chưa có key: dùng thử Premium 30 ngày tính từ lần đầu nạp bản có bản quyền. Ngày dùng thử lưu 2 nơi
+    ///    (registry + %LOCALAPPDATA%) có mã HMAC gắn mã máy, phát hiện sửa tay / lùi đồng hồ (TrialStore).
+    ///  - Tính năng bản thường (quét, xuất bảng, block mẫu...) KHÔNG cần mã.
+    /// Công cụ cấp key: tools\LHBKeyGen (hướng dẫn: docs/BAN_QUYEN_VA_CAP_KEY.md).
     /// </summary>
     public static class LicenseManager
     {
         public const int TrialDays = 30;
-        private const string KeyPrefix = "LHB1.";
-        private const string RegPath = @"Software\LHBBlockScheduler";
-        private static readonly DateTime Epoch = new DateTime(2020, 1, 1);
 
-        // Khoá công khai: chỉ kiểm tra được chữ ký, không tạo được mã
-        private const string PublicKeyXml =
-            "<RSAKeyValue><Modulus>4C2xpf9GFra5BUuzVo+aePdGJ1swysEKzoNLM1kHo11GgcXwUM5x5IMFoJFvHYJ9N2GBfNAHUgloLXxp6QemILzU9QhN/yUyyGvPDUqecDPAJ7EYGwY2sPspEcjbVWKkvrB1VETExIa9a2sKWwGBJjtQgH3W3Yu7kyQXR6M5HpU=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>";
+        /// <summary>
+        /// true = bắt bản quyền (bật từ v9.5 theo yêu cầu user 30/09/2026 "làm bảo mật hơn + cấp key trọn đời cho đồng nghiệp").
+        /// false = Premium mở cho mọi máy, không đếm ngày dùng thử (như v9.3 - v9.4).
+        /// (static readonly thay vì const để không có cảnh báo "code không chạy tới".)
+        /// </summary>
+        public static readonly bool Enforced = true;
 
         private static bool _trialNoticeShown;
 
-        /// <summary>Trạng thái đọc từ mã đã nhập.</summary>
+        /// <summary>Trạng thái mã đã nhập.</summary>
         public class LicenseInfo
         {
             public bool Valid;
-            public DateTime? Expiry; // null = vĩnh viễn
+            public DateTime? Expiry; // null = trọn đời
             public string Error;
+            public LicenseData Data;
         }
 
-        private static byte[] _machineBytes;
+        // ============================== MÃ MÁY ==============================
 
+        private static byte[] _machineBytes;
+        private static string _machineSource;
+
+        /// <summary>10 byte mã máy (UUID bo mạch chủ; dự phòng MachineGuid). Tính 1 lần / phiên.</summary>
         public static byte[] MachineBytes
         {
             get
             {
                 if (_machineBytes != null) return _machineBytes;
-                string guid = null;
                 try
                 {
-                    using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
-                    using (var k = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Cryptography"))
-                        guid = k?.GetValue("MachineGuid") as string;
+                    _machineBytes = MachineFingerprint.Compute(out _machineSource);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Warn($"[License] Không đọc được MachineGuid: {ex.Message}");
+                    Logger.Error(ex, "[License] Tính mã máy");
+                    _machineSource = "lỗi";
+                    using (var sha = SHA256.Create())
+                    {
+                        byte[] h = sha.ComputeHash(Encoding.UTF8.GetBytes("LHB-HW-V2|NAME|" + Environment.MachineName.ToUpperInvariant()));
+                        _machineBytes = new byte[LicenseCodec.MachineLength];
+                        Buffer.BlockCopy(h, 0, _machineBytes, 0, _machineBytes.Length);
+                    }
                 }
-                if (string.IsNullOrEmpty(guid)) guid = Environment.MachineName + "|" + Environment.UserName;
-                using (var sha = SHA256.Create())
-                    _machineBytes = sha.ComputeHash(Encoding.UTF8.GetBytes("LHB|" + guid.Trim().ToUpperInvariant())).Take(10).ToArray();
+                Logger.Log($"[License] Mã máy {LicenseCodec.FormatMachineCode(_machineBytes)} (nguồn: {_machineSource})");
                 return _machineBytes;
             }
         }
 
-        /// <summary>Mã máy hiển thị cho khách gửi về để tạo mã kích hoạt.</summary>
-        public static string MachineCode
+        /// <summary>Nguồn của mã máy: SMBIOS-UUID / MachineGuid / MachineName (hiện trong LHBBANQUYEN, LHBDIAG).</summary>
+        public static string MachineSource
         {
             get
             {
-                string b32 = Base32(MachineBytes); // 16 ký tự
-                return string.Join("-", Enumerable.Range(0, 4).Select(i => b32.Substring(i * 4, 4)));
+                var _ = MachineBytes;
+                return _machineSource;
             }
         }
+
+        /// <summary>Mã máy hiển thị cho khách gửi về để nhận key theo máy: XXXX-XXXX-XXXX-XXXX.</summary>
+        public static string MachineCode => LicenseCodec.FormatMachineCode(MachineBytes);
+
+        // ============================== KIỂM MÃ ==============================
 
         public static LicenseInfo Check(string key)
         {
             var info = new LicenseInfo();
             try
             {
-                key = (key ?? "").Trim().Replace(" ", "").Replace("\r", "").Replace("\n", "");
-                if (key.Length == 0) { info.Error = "Chưa nhập mã kích hoạt"; return info; }
-                if (!key.StartsWith(KeyPrefix)) { info.Error = "Mã không đúng định dạng (phải bắt đầu bằng LHB1.)"; return info; }
-                byte[] all = FromBase64Url(key.Substring(KeyPrefix.Length));
-                if (all.Length < 14) { info.Error = "Mã quá ngắn"; return info; }
-                byte[] payload = all.Take(13).ToArray();
-                byte[] sig = all.Skip(13).ToArray();
-                using (var rsa = new RSACryptoServiceProvider())
+                var r = LicensePolicy.Validate(key, MachineBytes, DateTime.Today);
+                info.Valid = r.Valid;
+                info.Error = r.Error;
+                info.Data = r.Data;
+                info.Expiry = r.Data?.Expiry;
+                if (!string.IsNullOrWhiteSpace(key))
                 {
-                    rsa.PersistKeyInCsp = false;
-                    rsa.FromXmlString(PublicKeyXml);
-                    if (!rsa.VerifyData(payload, CryptoConfig.MapNameToOID("SHA256"), sig)) { info.Error = "Chữ ký mã không hợp lệ"; return info; }
+                    Logger.Log(r.Data == null
+                        ? $"[License] Kiểm mã: {r.Error}"
+                        : $"[License] Kiểm mã serial {r.Data.SerialText}, kid {r.Data.KeyId}, {r.Data.KindText}, cấp cho '{r.Data.Label}', " +
+                          $"hạn {(r.Data.Expiry.HasValue ? r.Data.Expiry.Value.ToString("dd/MM/yyyy") : "trọn đời")}: " +
+                          (r.Valid ? "HỢP LỆ" : "KHÔNG hợp lệ - " + r.Error));
                 }
-                if (!payload.Take(10).SequenceEqual(MachineBytes)) { info.Error = "Mã kích hoạt của máy khác"; return info; }
-                int days = payload[10] | (payload[11] << 8);
-                info.Expiry = days == 0 ? (DateTime?)null : Epoch.AddDays(days);
-                if (info.Expiry.HasValue && DateTime.Today > info.Expiry.Value)
-                {
-                    info.Error = $"Mã đã hết hạn ngày {info.Expiry.Value:dd/MM/yyyy}";
-                    return info;
-                }
-                info.Valid = true;
             }
             catch (Exception ex)
             {
+                Logger.Error(ex, "[License] Kiểm mã kích hoạt");
+                info.Valid = false;
                 info.Error = "Mã không đọc được: " + ex.Message;
             }
             return info;
         }
 
-        // Kiểm chữ ký RSA 1 lần cho mỗi mã / mỗi ngày (mỗi nút Premium đều hỏi trạng thái bản quyền)
+        // Kiểm chữ ký 1 lần cho mỗi mã / mỗi ngày (mỗi nút Premium đều hỏi trạng thái bản quyền)
         private static string _checkedKey;
         private static DateTime _checkedDay;
         private static LicenseInfo _checkedInfo;
@@ -125,51 +132,30 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        /// <summary>
-        /// false = CHƯA bắt bản quyền (yêu cầu user 29/09/2026: "để xài free, khi nào nói bắt bản quyền thì hãy tính"):
-        /// Premium mở cho mọi máy, không cần mã, chưa ghi / chưa đếm ngày dùng thử. Mã kích hoạt vẫn nhập và kiểm được.
-        /// Khi user bảo bắt bản quyền: đổi thành true rồi build bản mới -> dùng thử 30 ngày, hết hạn cần mã theo mã máy.
-        /// (static readonly thay vì const để không có cảnh báo "code không chạy tới".)
-        /// </summary>
-        public static readonly bool Enforced = false;
-
         public static bool IsLicensed => !Enforced || Current.Valid;
 
-        /// <summary>Ngày bắt đầu dùng thử (ghi registry lần đầu gọi).</summary>
-        public static DateTime TrialStart
-        {
-            get
-            {
-                try
-                {
-                    using (var k = Registry.CurrentUser.CreateSubKey(RegPath))
-                    {
-                        string s = k?.GetValue("PremiumTrialStart") as string;
-                        if (DateTime.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)) return d;
-                        k?.SetValue("PremiumTrialStart", DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-                        Logger.Log("[License] Bắt đầu dùng thử Premium hôm nay");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warn($"[License] Không ghi được ngày dùng thử: {ex.Message}");
-                }
-                return DateTime.Today;
-            }
-        }
+        // ============================== DÙNG THỬ ==============================
 
-        /// <summary>Số ngày dùng thử còn lại. Chưa bắt bản quyền: không đụng registry (ngày dùng thử chưa bắt đầu).</summary>
-        public static int TrialDaysLeft => !Enforced ? TrialDays : Math.Max(0, TrialDays - (int)(DateTime.Today - TrialStart).TotalDays);
+        /// <summary>Số ngày dùng thử còn lại (0 = hết / đồng hồ bị lùi / dữ liệu dùng thử bị sửa).</summary>
+        public static int TrialDaysLeft => !Enforced ? TrialDays : TrialStore.DaysLeft(MachineBytes);
+
+        /// <summary>Lý do dùng thử = 0 bất thường (lùi đồng hồ, sửa dữ liệu), null nếu bình thường.</summary>
+        public static string TrialProblem => Enforced ? TrialStore.Problem : null;
 
         public static string StatusText
         {
             get
             {
                 var c = Current;
-                if (c.Valid) return c.Expiry.HasValue ? $"Đã kích hoạt Premium, hạn đến {c.Expiry.Value:dd/MM/yyyy}" : "Đã kích hoạt Premium vĩnh viễn";
+                if (c.Valid && c.Data != null)
+                {
+                    string exp = c.Expiry.HasValue ? $"hạn đến {c.Expiry.Value:dd/MM/yyyy}" : "trọn đời";
+                    return $"Đã kích hoạt Premium ({c.Data.KindText}, {exp}) - cấp cho {c.Data.Label}";
+                }
                 if (!Enforced) return "Premium miễn phí (chưa bật bản quyền, không cần mã)";
                 int left = TrialDaysLeft;
-                return left > 0 ? $"Dùng thử Premium: còn {left} ngày" : "Hết hạn dùng thử Premium";
+                if (left > 0) return $"Dùng thử Premium: còn {left} ngày";
+                return TrialProblem ?? "Hết hạn dùng thử Premium - cần mã kích hoạt (LHBBANQUYEN)";
             }
         }
 
@@ -191,39 +177,100 @@ namespace LHBBlockScheduler.Core
                 }
                 return true;
             }
-            Logger.Log($"[License] '{feature}': hết hạn dùng thử, chưa kích hoạt");
-            using (var dlg = new UI.LicenseDialog($"Tính năng Premium \"{feature}\" cần kích hoạt (đã hết {TrialDays} ngày dùng thử)."))
+            string why = TrialProblem ?? $"đã hết {TrialDays} ngày dùng thử";
+            Logger.Log($"[License] '{feature}': chặn - {why}, chưa có mã hợp lệ ({Current.Error})");
+            using (var dlg = new UI.LicenseDialog($"Tính năng Premium \"{feature}\" cần mã kích hoạt ({why})."))
                 Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(dlg);
             return IsLicensed;
         }
 
-        // ============================== MÃ HOÁ ==============================
-
-        private const string B32 = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // bỏ I, O, 0, 1 cho dễ đọc
-
-        public static string Base32(byte[] data)
+        /// <summary>Lưu mã mới (đã kiểm hợp lệ) hoặc xoá mã (key = null) -> tính lại trạng thái.</summary>
+        public static void SaveKey(string key)
         {
-            var sb = new StringBuilder();
-            int buffer = 0, bits = 0;
-            foreach (byte b in data)
-            {
-                buffer = (buffer << 8) | b;
-                bits += 8;
-                while (bits >= 5)
-                {
-                    sb.Append(B32[(buffer >> (bits - 5)) & 31]);
-                    bits -= 5;
-                }
-            }
-            if (bits > 0) sb.Append(B32[(buffer << (5 - bits)) & 31]);
-            return sb.ToString();
+            SettingsManager.Current.LicenseKey = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
+            SettingsManager.SaveSettings();
+            _checkedInfo = null;
+            Logger.Log(key == null ? "[License] Đã xoá mã kích hoạt, về chế độ dùng thử" : "[License] Đã lưu mã kích hoạt mới");
         }
 
-        public static byte[] FromBase64Url(string s)
+        /// <summary>
+        /// Ngày dùng thử v2: đọc / ghi 2 nơi - registry HKCU\Software\LHBBlockScheduler (giá trị "P2") và file
+        /// %LOCALAPPDATA%\LHBBlockScheduler\p2.dat. Quy tắc tính nằm ở Core/TrialLogic.cs (hàm thuần, có kiểm thử):
+        /// xoá 1 nơi không reset được; sửa tay / chép từ máy khác -> hết hạn; lùi đồng hồ -> tạm khoá tới khi chỉnh lại giờ.
+        /// Người rành máy vẫn xoá được cả 2 nơi (giới hạn của dùng thử offline) - xem docs/BAN_QUYEN_VA_CAP_KEY.md.
+        /// Tên mới (v9 dùng "PremiumTrialStart") -> máy đã chạy v9 - v9.2 được đủ 30 ngày tính từ bản v9.5.
+        /// </summary>
+        private static class TrialStore
         {
-            s = s.Replace('-', '+').Replace('_', '/');
-            switch (s.Length % 4) { case 2: s += "=="; break; case 3: s += "="; break; }
-            return Convert.FromBase64String(s);
+            private const string RegPath = @"Software\LHBBlockScheduler";
+            private const string RegValue = "P2";
+            private static int _cacheDay = -1;
+            private static int _cacheLeft;
+            public static string Problem { get; private set; }
+
+            private static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                                           "LHBBlockScheduler", "p2.dat");
+
+            public static int DaysLeft(byte[] machine)
+            {
+                int today = TrialLogic.Today(DateTime.Today);
+                if (_cacheDay == today) return _cacheLeft;
+                _cacheDay = today;
+                try
+                {
+                    byte[] reg = ReadRegistry(), file = ReadFile();
+                    var o = TrialLogic.Evaluate(reg, file, machine, today, TrialDays);
+                    Problem = o.Problem;
+                    if (o.Started) Logger.Log($"[License] Bắt đầu dùng thử Premium {TrialDays} ngày từ hôm nay");
+                    if (o.Tampered)
+                        Logger.Warn($"[License] Dữ liệu dùng thử sai HMAC (registry={(reg != null ? "có" : "không")}, file={(file != null ? "có" : "không")}) -> hết hạn dùng thử");
+                    if (o.ClockBack)
+                        Logger.Warn($"[License] Phát hiện lùi đồng hồ: hôm nay {DateTime.Today:dd/MM/yyyy}, lần dùng gần nhất {LicenseCodec.Epoch.AddDays(o.Last):dd/MM/yyyy}");
+                    if (o.WriteRegistry) WriteRegistry(o.Blob);
+                    if (o.WriteFile) WriteFile(o.Blob);
+                    if ((o.WriteRegistry || o.WriteFile) && !o.Started)
+                        Logger.Log($"[License] Ghi lại dữ liệu dùng thử (registry={o.WriteRegistry}, file={o.WriteFile}), bắt đầu {LicenseCodec.Epoch.AddDays(o.Start):dd/MM/yyyy}, còn {o.DaysLeft} ngày");
+                    _cacheLeft = o.DaysLeft;
+                    return _cacheLeft;
+                }
+                catch (Exception ex)
+                {
+                    // Lỗi đọc / ghi (registry bị chặn...) -> không khoá oan người dùng: cho dùng thử hôm nay, ghi log
+                    Logger.Error(ex, "[License] Đọc / ghi ngày dùng thử");
+                    Problem = null;
+                    _cacheLeft = 1;
+                    return 1;
+                }
+            }
+
+            private static byte[] ReadRegistry()
+            {
+                try
+                {
+                    using (var k = Registry.CurrentUser.OpenSubKey(RegPath))
+                        return k?.GetValue(RegValue) is string s && s.Length > 0 ? Convert.FromBase64String(s) : null;
+                }
+                catch (FormatException) { return new byte[0]; } // có nhưng hỏng -> tính là dữ liệu sai
+            }
+
+            private static void WriteRegistry(byte[] blob)
+            {
+                using (var k = Registry.CurrentUser.CreateSubKey(RegPath))
+                    k?.SetValue(RegValue, Convert.ToBase64String(blob));
+            }
+
+            private static byte[] ReadFile()
+            {
+                string p = FilePath;
+                return File.Exists(p) ? File.ReadAllBytes(p) : null;
+            }
+
+            private static void WriteFile(byte[] blob)
+            {
+                string p = FilePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(p));
+                File.WriteAllBytes(p, blob);
+            }
         }
     }
 }
