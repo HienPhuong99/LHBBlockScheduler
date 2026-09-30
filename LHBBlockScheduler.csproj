@@ -1,10 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <!--
+      v9.7: mỗi dòng AutoCAD 1 bản DLL, mỗi bản 1 thư mục trong bin\<cấu hình>\:
+        net48            -> bin\...\net48\   AutoCAD 2021 - 2024 (R24.x, .NET Framework 4.8), tham chiếu libs\ như trước
+        net8.0-windows   -> bin\...\net8\    AutoCAD 2025 - 2026 (R25.x, .NET 8; Autodesk xác nhận plugin .NET 8 vẫn chạy
+                                             trên bản 2025 / 2026 đã cập nhật lên .NET 10)
+        net10.0-windows  -> bin\...\net10\   AutoCAD 2027 (R26.x, .NET 10)
+      Mặc định chỉ build net48 (máy dev chưa chắc có .NET 10 SDK). LhbAllTargets=true -> build cả 3
+      (build.ps1 tự bật khi máy có .NET 10 SDK; phiên cloud luôn bật).
+    -->
+    <TargetFrameworks Condition="'$(LhbAllTargets)' == 'true'">net48;net8.0-windows;net10.0-windows</TargetFrameworks>
+    <TargetFramework Condition="'$(LhbAllTargets)' != 'true'">net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Ribbon (Premium P11) dùng WPF ImageSource: net48 tham chiếu PresentationCore / WindowsBase bên dưới -->
+    <UseWPF Condition="'$(TargetFramework)' != 'net48'">true</UseWPF>
+    <!-- Cho phép build bản net8 / net10 trên máy không phải Windows (phiên cloud); trên Windows không ảnh hưởng -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>LHBBlockScheduler</AssemblyName>
     <RootNamespace>LHBBlockScheduler</RootNamespace>
     <Platforms>x64</Platforms>
@@ -14,12 +29,17 @@
     <!--
       QUAN TRỌNG: sửa đường dẫn dưới đây cho đúng thư mục cài AutoCAD trên máy bạn.
       Ví dụ: C:\Program Files\Autodesk\AutoCAD 2024\
-      Xem lại HUONG_DAN_BUILD.md để biết cách kiểm tra.
+      Xem lại HUONG_DAN_BUILD.md để biết cách kiểm tra. (Chỉ dùng cho bản net48.)
     -->
     <AutoCADInstallDir>libs\</AutoCADInstallDir>
     <AppendPlatformsToOutputPath>false</AppendPlatformsToOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <OutputPath>bin\$(Configuration)\net48\</OutputPath>
+    <LhbTargetFolder Condition="'$(TargetFramework)' == 'net8.0-windows'">net8</LhbTargetFolder>
+    <LhbTargetFolder Condition="'$(TargetFramework)' == 'net10.0-windows'">net10</LhbTargetFolder>
+    <LhbTargetFolder Condition="'$(LhbTargetFolder)' == ''">net48</LhbTargetFolder>
+    <OutputPath>bin\$(Configuration)\$(LhbTargetFolder)\</OutputPath>
+    <!-- Mỗi đích 1 thư mục obj riêng (AppendTargetFrameworkToOutputPath=false thì SDK không tự tách) -->
+    <IntermediateOutputPath>obj\$(Configuration)\$(LhbTargetFolder)\</IntermediateOutputPath>
     <DefaultItemExcludes>$(DefaultItemExcludes);LHBLoader\**;tools\**;tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -27,7 +47,7 @@
     <Compile Remove="Loader.cs" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <!-- 3 DLL lõi của AutoCAD .NET API. CopyLocal PHẢI là false, nếu không AutoCAD sẽ báo lỗi
          version mismatch hoặc crash khi load. -->
     <Reference Include="AcMgd">
@@ -44,7 +64,7 @@
     </Reference>
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <!-- JSON dùng DataContractJsonSerializer có sẵn trong .NET Framework (Core/JsonHelper.cs).
          KHÔNG thêm lại System.Text.Json: thiếu binding redirect trong acad.exe -> TypeInitializationException. -->
     <Reference Include="System.Runtime.Serialization" />
@@ -55,7 +75,21 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
 
-  <Target Name="BuildLoaderAndRuntimeCopy" AfterTargets="Build">
+  <!--
+    AutoCAD 2025 - 2027: API lấy từ gói NuGet chính thức của Autodesk, CHỈ để biên dịch. ExcludeAssets=runtime = không chép
+    DLL AutoCAD nào ra thư mục add-in (tương đương Private=false ở trên); add-in không mang theo DLL ngoài nào.
+    Các thư viện .NET (DataContractJsonSerializer, System.IO.Compression, WinForms, WPF) có sẵn trong .NET 8 / 10.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <PackageReference Include="AutoCAD.NET" Version="25.0.1" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <PackageReference Include="AutoCAD.NET" Version="26.0.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <!-- Máy dev (AutoCAD 2021): build loader + chép bản net48 sang %APPDATA%\...\Runtime. Không chạy ở bước build
+       tổng của nhiều đích (TargetFramework rỗng) và bản net8 / net10. -->
+  <Target Name="BuildLoaderAndRuntimeCopy" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net48'">
     <MSBuild Projects="LHBLoader\LHBLoader.csproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
     <PropertyGroup>
       <RuntimeTimestamp>$([System.DateTime]::Now.ToString("yyyyMMdd_HHmmss"))</RuntimeTimestamp>
@@ -70,7 +104,7 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\PostBuild.ps1&quot; -TargetDir &quot;$(RuntimeTargetDir)&quot; -Configuration &quot;$(Configuration)&quot; -ProjectOutputDir &quot;$(TargetDir.TrimEnd('\'))&quot;" />
   </Target>
 
-  <Target Name="CleanLoader" AfterTargets="Clean">
+  <Target Name="CleanLoader" AfterTargets="Clean" Condition="'$(TargetFramework)' == 'net48'">
     <MSBuild Projects="LHBLoader\LHBLoader.csproj" Targets="Clean" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
   </Target>
 </Project>

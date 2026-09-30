@@ -12,7 +12,7 @@ namespace LHBBlockScheduler.Core
 {
     /// <summary>
     /// Thư viện block mẫu (yêu cầu 29/09/2026, giống hộp thoại "Thông tin Block mẫu" trong video mẫu):
-    ///  - Lưu CẠNH ADD-IN: &lt;thư mục DLL&gt;\ThuVienMau\&lt;bộ&gt;.json (tên thống kê, đơn vị, ảnh ký hiệu base64)
+    ///  - Lưu CẠNH ADD-IN: &lt;thư mục gốc add-in&gt;\ThuVienMau\&lt;bộ&gt;.json (tên thống kê, đơn vị, ảnh ký hiệu base64)
     ///    + &lt;bộ&gt;.dwg (định nghĩa block). Mang cả thư mục add-in sang máy khác là có đủ block mẫu.
     ///  - Bản sao dự phòng ở %APPDATA%\LHBBlockScheduler\ThuVienMau: giải nén bản add-in mới sang thư mục khác
     ///    thì tự chép thư viện từ bản dự phòng sang, không mất block mẫu.
@@ -27,14 +27,15 @@ namespace LHBBlockScheduler.Core
 
         public static string BackupFolder => Path.Combine(Logger.AppDataFolder, FolderName);
 
-        /// <summary>Thư mục thư viện đang dùng (cạnh DLL nếu ghi được, không thì APPDATA).</summary>
+        /// <summary>Thư mục thư viện đang dùng (thư mục gốc add-in nếu ghi được, không thì APPDATA).</summary>
         public static string Folder
         {
             get
             {
                 if (_folder != null) return _folder;
-                string dllDir = Logger.DllFolder;
-                string candidate = string.IsNullOrEmpty(dllDir) ? null : Path.Combine(dllDir, FolderName);
+                // v9.7: thư mục gốc add-in (bản AutoCAD 2025+ ở thư mục con net8 / net10 dùng chung thư viện với bản 2021 - 2024)
+                string addinDir = Logger.AddinRootFolder;
+                string candidate = string.IsNullOrEmpty(addinDir) ? null : Path.Combine(addinDir, FolderName);
                 if (candidate != null && CanWrite(candidate))
                 {
                     _folder = candidate;
@@ -43,7 +44,7 @@ namespace LHBBlockScheduler.Core
                 {
                     _folder = BackupFolder;
                     Directory.CreateDirectory(_folder);
-                    Logger.Warn($"[TemplateLibrary] Không ghi được thư mục cạnh DLL '{candidate}' -> lưu thư viện mẫu ở '{_folder}'");
+                    Logger.Warn($"[TemplateLibrary] Không ghi được thư mục cạnh add-in '{candidate}' -> lưu thư viện mẫu ở '{_folder}'");
                 }
                 MigrateFromBackupIfEmpty();
                 Logger.Log($"[TemplateLibrary] Thư mục thư viện block mẫu: '{_folder}'");
@@ -247,22 +248,43 @@ namespace LHBBlockScheduler.Core
         /// <summary>
         /// Block mẫu khớp: cùng tên block; ưu tiên cùng chủng loại, sau đó mẫu không ghi chủng loại (mọi chủng loại).
         /// v9.4: block trong XREF tên "XREF|TÊN" -> không khớp tên đầy đủ thì thử lại với "TÊN".
+        /// v9.6: numericNames = tên tham số số của block động không có Visibility (DynamicInfo.LegacyNames): block mẫu lưu
+        /// từ bản cũ có chủng loại "Distance1=47116.93" được so như chưa ghi chủng loại (khớp mọi độ dài).
         /// </summary>
-        public static TemplateEntry Match(TemplateLibrary lib, string blockName, string visibility)
+        public static TemplateEntry Match(TemplateLibrary lib, string blockName, string visibility, ICollection<string> numericNames = null)
         {
             if (lib?.Entries == null || string.IsNullOrEmpty(blockName)) return null;
-            var e = MatchName(lib, blockName, visibility);
+            var e = MatchName(lib, blockName, visibility, numericNames);
             if (e != null) return e;
             string bare = StripXrefPrefix(blockName);
-            return bare.Length != blockName.Length ? MatchName(lib, bare, visibility) : null;
+            return bare.Length != blockName.Length ? MatchName(lib, bare, visibility, numericNames) : null;
         }
 
-        private static TemplateEntry MatchName(TemplateLibrary lib, string blockName, string visibility)
+        private static TemplateEntry MatchName(TemplateLibrary lib, string blockName, string visibility, ICollection<string> numericNames)
         {
             var sameName = lib.Entries.Where(e => string.Equals(e.BlockName, blockName, StringComparison.OrdinalIgnoreCase)).ToList();
-            return sameName.FirstOrDefault(e => !string.IsNullOrEmpty(e.VisibilityState) &&
-                                                string.Equals(e.VisibilityState, visibility ?? "", StringComparison.OrdinalIgnoreCase))
-                   ?? sameName.FirstOrDefault(e => string.IsNullOrEmpty(e.VisibilityState));
+            int i = DynamicParamText.MatchVariant(sameName.Select(e => e.VisibilityState).ToList(), visibility, numericNames);
+            return i >= 0 ? sameName[i] : null;
+        }
+
+        /// <summary>
+        /// Chuẩn hoá chủng loại lưu kiểu cũ của các block mẫu tên blockName (v9.6, xem DynamicParamText.StripNumericParts).
+        /// Chỉ gọi khi block KHÔNG có Visibility (chủng loại cũ chỉ ghép tham số lúc đó). Trả số block mẫu đã sửa.
+        /// </summary>
+        public static int NormalizeLegacyVariants(TemplateLibrary lib, string blockName, ICollection<string> numericNames)
+        {
+            if (lib?.Entries == null || numericNames == null || numericNames.Count == 0) return 0;
+            int changed = 0;
+            foreach (var e in lib.Entries.Where(x => string.Equals(x.BlockName, blockName, StringComparison.OrdinalIgnoreCase)))
+            {
+                string fixedVariant = DynamicParamText.StripNumericParts(e.VisibilityState, numericNames);
+                if (fixedVariant == (e.VisibilityState ?? "")) continue;
+                Logger.Log($"[TemplateLibrary] Bộ '{lib.Name}': block mẫu '{e.BlockName}' chủng loại cũ '{e.VisibilityState}' -> '{fixedVariant}' " +
+                           "(tham số độ dài / góc / toạ độ không làm chủng loại từ v9.6)");
+                e.VisibilityState = fixedVariant;
+                changed++;
+            }
+            return changed;
         }
 
         /// <summary>
@@ -289,7 +311,7 @@ namespace LHBBlockScheduler.Core
             var removed = new List<string>();
             foreach (var item in items)
             {
-                var e = Match(lib, item.BlockName, item.VisibilityState);
+                var e = Match(lib, item.BlockName, item.VisibilityState, item.NumericParamNames);
                 if (e != null)
                 {
                     item.DisplayName = string.IsNullOrWhiteSpace(e.DisplayName) ? item.BlockName : e.DisplayName;
@@ -563,7 +585,8 @@ namespace LHBBlockScheduler.Core
         private bool IsTemplate(BlockReference br, string name)
         {
             if (!_names.Contains(name) && !_names.Contains(TemplateLibraryManager.StripXrefPrefix(name))) return false;
-            return TemplateLibraryManager.Match(_lib, name, BlockExtractor.ReadVisibility(br, name)) != null;
+            var dyn = BlockExtractor.ReadDynamicInfo(br, name);
+            return TemplateLibraryManager.Match(_lib, name, dyn.Variant, dyn.LegacyNames) != null;
         }
 
         /// <summary>Định nghĩa block (BTR của instance) có block mẫu ở bất kỳ tầng nào - nhớ theo BTR.</summary>

@@ -41,6 +41,7 @@ namespace LHBBlockScheduler.UI
                 new LhbButton("Thống kê\nblock", "LHBSCAN", "TK", Color.FromArgb(41, 128, 185), "Quét chọn block, mở bảng thống kê"),
                 new LhbButton("Block\nmẫu", "LHBMAU", "BM", Color.FromArgb(39, 174, 96), "Thư viện block mẫu"),
                 new LhbButton("Cập nhật\nbảng", "LHBCAPNHAT", "CN", Color.FromArgb(142, 68, 173), "Đếm lại bảng đã xuất sau khi sửa bản vẽ"),
+                new LhbButton("Khớp\ncột bảng", "LHBKHOPCOT", "KC", Color.FromArgb(41, 128, 185), "Khớp độ rộng cột bảng đã xuất theo chữ (như Excel)"),
                 new LhbButton("Nhiều\nbản vẽ", "LHBNHIEUBV", "NB", Color.FromArgb(52, 73, 94), "Thống kê nhiều file DWG cùng lúc"),
             }),
             ("Khối lượng", new[]

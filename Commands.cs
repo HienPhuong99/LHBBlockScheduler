@@ -127,6 +127,23 @@ namespace LHBBlockScheduler
         [CommandMethod("LHBCAPNHAT")]
         public void Premium_UpdateTables() => RunPremium("Cập nhật bảng", TableUpdater.RunCommand);
 
+        /// <summary>v9.6: khớp độ rộng cột bảng AutoCAD Table theo chữ trong cột (như double-click mép cột trong Excel).</summary>
+        [CommandMethod("LHBKHOPCOT")]
+        public void FitTableColumns()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try
+            {
+                TableAutoFit.RunCommand(doc);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "LHBKHOPCOT");
+                doc.Editor.WriteMessage($"\nLỗi khớp cột bảng - xem chi tiết tại {Logger.GetLogFilePath()}");
+            }
+        }
+
         [CommandMethod("LHBNHIEUBV")]
         public void Premium_MultiDrawing() => RunPremium("Nhiều bản vẽ", doc => Application.ShowModelessDialog(new MultiDrawingDialog(doc)));
 
@@ -425,6 +442,8 @@ namespace LHBBlockScheduler
 
             ed.WriteMessage("\n==================================================================");
             ed.WriteMessage("\n[LHB] THÔNG TIN PHIÊN BẢN ĐANG CHẠY:");
+            ed.WriteMessage($"\n  - Phiên bản           : {MyApp.DisplayVersion}, bản DLL cho {MyApp.BuildTarget}");
+            ed.WriteMessage($"\n  - AutoCAD / .NET      : {MyApp.AcadVersionText} / {MyApp.RuntimeText}");
             ed.WriteMessage($"\n  - Đường dẫn DLL       : {dllPath}");
             ed.WriteMessage($"\n  - File build-info.txt : {(File.Exists(buildInfoPath) ? buildInfoPath : "(Không tìm thấy cạnh DLL)")}");
             ed.WriteMessage($"\n  - Cấu hình (Config)   : {config}");
@@ -440,7 +459,7 @@ namespace LHBBlockScheduler
         }
 
         /// <summary>
-        /// Lệnh LHBDIAG: Gom toàn bộ bằng chứng chẩn đoán hệ thống vào file text cạnh DLL.
+        /// Lệnh LHBDIAG: Gom toàn bộ bằng chứng chẩn đoán hệ thống vào file text ở thư mục gốc add-in (cạnh LHB.lsp).
         /// Chạy được kể cả khi form chưa mở.
         /// </summary>
         [CommandMethod("LHBDIAG")]
@@ -469,7 +488,10 @@ namespace LHBBlockScheduler
 
             sb.AppendLine("--- 1. THÔNG TIN ASSEMBLY & BUILD ---");
             sb.AppendLine($"Phiên bản                : {MyApp.DisplayVersion} ({MyApp.AssemblyVersionText})");
+            sb.AppendLine($"Bản DLL cho              : {MyApp.BuildTarget}");
+            sb.AppendLine($".NET đang chạy           : {MyApp.RuntimeText}");
             sb.AppendLine($"Đường dẫn DLL đang chạy : {dllPath}");
+            sb.AppendLine($"Thư mục gốc add-in       : {Logger.AddinRootFolder}");
             sb.AppendLine($"MD5 thực tế từ DLL       : {actualMd5}");
             if (File.Exists(dllPath))
             {
@@ -631,9 +653,10 @@ namespace LHBBlockScheduler
             sb.AppendLine();
             sb.AppendLine("========================== HẾT BÁO CÁO CHẨN ĐOÁN ==========================");
 
-            // Ghi ra file <thư mục DLL>\LHBDIAG_<yyyyMMdd_HHmmss>.txt
+            // Ghi ra file <thư mục gốc add-in>\LHBDIAG_<yyyyMMdd_HHmmss>.txt (v9.7: bản AutoCAD 2025+ ở thư mục con net8 /
+            // net10 cũng ghi ra thư mục gốc, cạnh LHB.lsp - chỗ user quen lấy file)
             string diagFileName = $"LHBDIAG_{fileTimestamp}.txt";
-            string targetDiagPath = Path.Combine(dllDir, diagFileName);
+            string targetDiagPath = Path.Combine(Logger.AddinRootFolder ?? dllDir, diagFileName);
             bool saved = false;
 
             try

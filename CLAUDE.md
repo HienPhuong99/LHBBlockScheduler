@@ -1,12 +1,16 @@
 # Dự án: LHBBlockScheduler — AutoCAD Add-in thống kê Block
 
 ## Ngữ cảnh kỹ thuật (BẮT BUỘC tuân thủ)
-- C#, SDK-style csproj, net48, x64. AutoCAD .NET API (AcMgd, AcDbMgd, AcCoreMgd trong `libs\`), AutoCAD 2021+.
-- 3 DLL AutoCAD LUÔN `<Private>false</Private>`. Không bao giờ đổi thành true.
+- C#, SDK-style csproj, x64. Từ v9.7 đa đích (mỗi dòng AutoCAD 1 DLL): `net48` = AutoCAD 2021 – 2024 (AcMgd, AcDbMgd,
+  AcCoreMgd trong `libs\`), `net8.0-windows` = 2025 – 2026, `net10.0-windows` = 2027 (NuGet `AutoCAD.NET` 25.0.1 / 26.0.0
+  CHỈ để biên dịch, `ExcludeAssets="runtime"`). Mặc định chỉ build net48; `-p:LhbAllTargets=true` build cả 3 -> `bin\Release\
+  net48|net8|net10` (cần .NET 10 SDK). Code chỉ cho .NET 8/10 đặt trong `#if NET` (`MyApp.BuildTarget`, `UiKit.KeepFrameworkFont`).
+- 3 DLL AutoCAD LUÔN `<Private>false</Private>`. Không bao giờ đổi thành true (NuGet: luôn `ExcludeAssets="runtime"`).
 - UI: WinForms viết bằng code (không Designer.cs).
 - JSON: `Core/JsonHelper.cs` (DataContractJsonSerializer). KHÔNG dùng System.Text.Json (crash trong acad.exe).
   DataContractJsonSerializer không chạy property initializer -> field bool mới đặt tên sao cho mặc định = false.
-- Dữ liệu: `%APPDATA%\LHBBlockScheduler\` (settings.json, Libraries\, Thumbs\, log.txt).
+- Dữ liệu: `%APPDATA%\LHBBlockScheduler\` (settings.json, Libraries\, Thumbs\, log.txt). Thư mục gốc add-in (cạnh LHB.lsp:
+  ThuVienMau\, log.txt, LHBDIAG) = `Logger.AddinRootFolder` (`AddinPaths.ResolveRoot`: DLL ở thư mục con net8 / net10 -> thư mục cha).
 - Xuất bảng 2 kiểu: `TableExporterAcad` (AutoCAD Table, mặc định) và `TableExporter` (Line + DBText, "cũ").
 
 ## Quy tắc code AutoCAD API (sai là crash CAD)
@@ -24,26 +28,78 @@
 - Sửa xong 1 lỗi, thêm log chi tiết ở đúng chỗ đó.
 
 ## Quy trình phát hành bản test
-1. `dotnet build -c Release`, sửa hết lỗi compile.
+1. `dotnet build -c Release -p:LhbAllTargets=true` (3 bản DLL), sửa hết lỗi compile + cảnh báo của cả 3 đích.
 2. `powershell -ExecutionPolicy Bypass -File build.ps1` -> `Dist\LHBBlockScheduler\` (MD5 trong build-info.txt).
 3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium" (từ v9.4 chỉ sửa
    `MyApp.Version` trong Properties/AssemblyInfo.cs),
    `Dist\LHBBlockScheduler_<yyyyMMdd>_vN_Premium.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN_Premium.md` (vN có thể là v9.1).
-   Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md.
+   Zip = thư mục Dist\LHBBlockScheduler + HUONG_DAN_SU_DUNG.md + TINH_NANG_PREMIUM.md + (từ v9.6) hướng dẫn test của bản
+   (ghi MD5 vào hướng dẫn test TRƯỚC khi nén; phiên cloud: `python3 tools/pack_cloud.py stage` rồi `zip <yyyyMMdd>`).
    (v8 trở về trước: `Dist\LHBBlockScheduler_<yyyyMMdd>_vN.zip`, `Dist\HUONG_DAN_TEST_<yyyyMMdd>_vN.md`)
    (theo mẫu các bản trước: bản này sửa gì, MD5, bảng bước test, cần gửi về gì), gửi cả 2 file cho user.
 4. (Đổi 29/09/2026 theo user) KHÔNG gửi demo, KHÔNG hỏi ý giữa chừng: tự chọn phương án tốt nhất, làm xong trọn
-   (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
-5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
+   (build, đóng gói, tài liệu, push GitHub) rồi báo cáo 1 lần.
+5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip commit + push luôn trong `Dist\`
+   (từ 30/09/2026, `.gitignore` không chặn `Dist/*.zip` nữa; v9 - v9.4 ở Releases). Máy dev có `gh` thì tạo thêm Release.
+6. (30/09/2026 theo user: "từ lần sau cứ push code và nén luôn nha, tôi chỉ việc vô file kiểm tra thôi") Mỗi bản TỰ làm hết:
+   build -> nén zip -> push code + zip -> gửi file zip cho user (phiên cloud: SendUserFile; máy dev: chép vào
+   `C:\Users\vsp\Downloads\tool\`). User chỉ mở file kiểm tra: báo cáo KHÔNG giao việc GitHub cho user (tạo Release, gộp PR...).
 
-## Trạng thái (30/09/2026): bản v9.5 Premium (bản quyền v2, ĐÃ BẬT bản quyền) đã phát hành, CHƯA có kết quả test (v9 – v9.4 cũng chưa)
-v9.5 làm ở phiên cloud, PR mới từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
+## Trạng thái (30/09/2026): bản v9.7 Premium (chạy AutoCAD 2021 – 2027) đã phát hành, CHƯA có kết quả test (v9 – v9.6 cũng chưa)
+v9.7 Premium (MD5 net48 `401475A3C654362B5D0CF9EFEE757BFA`, net8 `695E16FFB32622ED3743562E2E9E038B`, net10 `5A55D24AB9F341328203A2BC868F42E0`,
+`Dist\HUONG_DAN_TEST_20260930_v9.7_Premium.md`, build cloud tại commit 6001c3f) = v9.6 + đa phiên bản AutoCAD (review D1; user 30/09
+"Tiếp tục nhé bạn" -> tự chọn bước tiếp theo của lộ trình: đồng nghiệp dùng key review có thể đang chạy AutoCAD 2025+):
+- csproj đa đích (xem Ngữ cảnh kỹ thuật). `[assembly: SupportedOSPlatform("windows")]` trong `#if NET` (GenerateAssemblyInfo=false
+  nên SDK không tự ghi, thiếu thì CA1416 báo ~6000 cảnh báo). Build 3 đích 0 lỗi 0 cảnh báo, không chép DLL AutoCAD ra output.
+- Gói: thư mục gốc = bản net48 + LHB.lsp + build-info.txt (MD5 net48 = "dấu" nhận thư mục add-in như cũ); `net8\`, `net10\` mỗi
+  thư mục DLL + PDB + deps.json + build-info.txt riêng. `LHB.lsp`: `*LHB_EXPECTED_MD5_NET8*` / `_NET10*` (chữ mẫu
+  `@@LHB_BUILD_MD5_NET8@@` / `_NET10@@`, build.ps1 + pack_cloud.py thay), `lhb:TargetSub` theo `(atof (getvar "ACADVER"))`
+  (< 25 gốc, < 26 net8, còn lại net10), ACADVER < 24 báo không hỗ trợ, gói thiếu bản -> báo, kiểm build-info.txt thư mục con,
+  `lhb:RootOf` (chọn DLL trong net8 / net10 ở hộp thoại -> thư mục cha), cảnh báo "nạp nhầm bản gốc vào AutoCAD 2025+".
+- `MyApp.BuildTarget` / `RuntimeText` / `AcadVersionText`, `CheckAcadVersion` (Application.Version.Major ngoài dải của bản ->
+  cảnh báo dòng lệnh), LHBVERSION / LHBDIAG in thêm. `Logger.AddinRootFolder` cho ThuVienMau, log.txt cạnh add-in, LHBDIAG,
+  InstallDir registry. `UiKit.KeepFrameworkFont` (5 form không đặt font: .NET 8 đổi mặc định sang Segoe UI 9 -> đặt
+  SystemFonts.DefaultFont như .NET Framework). D4: `CommandAliasManager` gọi `Autodesk.AutoCAD.Internal.Utils` qua hàm nhỏ
+  `[MethodImpl(NoInlining)]`, field `_callbacks` kiểu object (thiếu API -> chỉ phím tắt lỗi, không hỏng cả lớp).
+- build.ps1: có .NET 10 SDK (`dotnet --list-sdks`) -> `-p:LhbAllTargets=true` + chép net8 / net10 vào Dist, không có -> chỉ net48
+  (LHB.lsp báo "gói không có bản" trên AutoCAD 2025+). `tools/pack_cloud.py` đóng gói 3 bản, bước zip kiểm đủ 3 MD5 trong hướng dẫn test.
+- tests/LHBCoreTests 46 kiểm tra (+7 `AddinPaths.ResolveRoot`).
+Chưa làm (cần test thật): bundle ApplicationPlugins phát hành 3 ComponentEntry (D2, cùng installer E2); DPI (D6).
+Cần xác nhận khi có kết quả test v9.7: AutoCAD 2021 vẫn nạp bản gốc + mọi thứ như v9.6; AutoCAD 2025 / 2026 / 2027 nạp đúng
+net8 / net10, form không tràn chữ, Ribbon (reflection AdWindows .NET 8), ảnh ký hiệu (GraphicsSystem), Excel mở, ECDSA / mã máy
+chạy trên .NET 8 (log `[License]`), phím tắt (API nội bộ).
+v9.6 + v9.7 làm ở phiên cloud, PR #3 từ nhánh claude/feature-review-monetization-plan-4hj52r (chưa gộp main: gộp khi user bảo).
+v9.6 Premium (MD5 `5FEEE00BD988C1B1EDE8E98E84A63C89`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit 76ccb1e) = v9.5 +
+yêu cầu user 30/09 (ảnh hộp thoại block mẫu + form + bảng CAD có đầu báo tia chiếu chủng loại "Distance1=12320.3286822983"):
+- Chủng loại block động CHỈ từ Visibility, không có Visibility thì tham số dạng chữ (Lookup...). Tham số SỐ (độ dài Linear /
+  Polar / XY, góc, toạ độ Point, lật Flip) không bao giờ làm chủng loại (trước: ghép "Tên=Giá trị" mọi tham số -> mỗi độ dài
+  1 dòng, cột Chủng loại bảng xuất rộng vì chữ dài). `BlockExtractor.ReadDynamic` trả `DynamicInfo` (Variant, HasVisibility,
+  Sizes, NumericNames, LegacyNames = tên tham số số khi KHÔNG có Visibility); `ReadDynamicInfo`, `FindDynamicInfo(db, tên)`.
+- "Tách theo kích thước" (form hàng 2, settings `SplitBySize`, `ExtractionOptions.SplitBySize`, TableScanInfo.SplitBySize):
+  kích thước = tham số đơn vị Distance / Area, `VisibleInCurrentVisibilityState`, trừ toạ độ "... X/Y" của Point; nhiều tham
+  số "1200 x 600"; làm tròn `DynamicParamText.FormatSize` (~4 chữ số có nghĩa, dấu chấm cố định). Khoá gom "||SIZE:". Cột
+  `colSize` "Kích thước" (DataPropertyName Size, sửa được) hiện theo ô tick; bảng CAD / Excel (số) có cột này. Nút Căn lề
+  chuyển lên hàng 1. Quét thêm (`FindRowFor`) nay khớp theo GroupKey. Nhiều bản vẽ không tách theo kích thước.
+- Block mẫu cũ "Distance1=47116.93": `DynamicParamText.MatchVariant / StripNumericParts` bỏ phần tham số số khi so (có tên
+  tham số số của block đang quét, chỉ khi block không có Visibility -> trạng thái Visibility dạng "K=80" không bị đụng);
+  `TemplateLibraryDialog.FixLegacyVariants` tự để trống + lưu khi mở hộp thoại (block có trong bản vẽ); Thêm từ bản vẽ không thêm trùng.
+- LHBCAPNHAT: TableScanInfo `Version` 3 (`TableUpdater.ScanInfoVersion`); bảng Version < 3 quét với
+  `ExtractionOptions.LegacyVariant` (chủng loại kiểu cũ) để khoá dòng cũ vẫn khớp.
+- Ô ký hiệu: block động (`BlockItem.IsDynamic`) luôn chép hình từ instance như block có chủng loại; tên LHB_SYM kèm kích thước.
+- `LHBKHOPCOT` (`Core/TableAutoFit.cs`, không cần Premium, Ribbon / palette / LHBLENH / LHB.lsp): khớp độ rộng cột chữ của
+  AutoCAD Table theo chữ (cùng công thức lúc xuất), bỏ ô gộp + cột ký hiệu. User hỏi "bảng co giãn, tự fix như Excel":
+  AutoCAD Table vốn kéo grip được (chữ xuống dòng, ký hiệu AutoFit), lệnh này = double-click mép cột Excel.
+- `Core/DynamicParamText.cs` hàm thuần + `tests/LHBCoreTests` (39 kiểm tra, chạy với văn hoá vi-VN).
+Cần xác nhận khi có kết quả test v9.6: đầu báo tia chiếu 1 dòng chủng loại trống; tách theo kích thước đúng độ dài; block mẫu
+cũ tự để trống + chỉ quét block mẫu đếm đủ mọi độ dài; `UnitsType` / `VisibleInCurrentVisibilityState` đọc được (log
+`BlockExtractor: N block động có tham số số`); LHBKHOPCOT đổi rộng cột, dòng tự thấp lại.
+v9.5 làm ở phiên cloud, PR #2 (gộp main 30/09 theo lời user "push và gộp lại hết") từ nhánh claude/feature-review-monetization-plan-4hj52r (PR #1 = v9.4 đã gộp main 30/09).
 Zip v9.5 gửi user là bản build cloud (MD5 `D1626C1147BC58F3AC0FED232D10BC95`); nếu build lại trên máy dev bằng libs\ như v9.4
 thì MD5 đổi -> sửa MD5 trong `Dist\HUONG_DAN_TEST_20260930_v9.5_Premium.md` + dòng v9.5 bên dưới.
 v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.
 Zip phát hành build lại trên máy dev bằng libs\ -> MD5 DLL `5F5B53084349716CB7D9A6FF4054DE30` (bản build cloud MD5
 `DA84C6DB97E8BFAFD4437EE1A1302C6C` không phát hành). Zip + hướng dẫn test cũng chép vào `C:\Users\vsp\Downloads\tool\` như các bản cũ.
-Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
+Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip: `Dist\` trên GitHub (từ v9.5), v9 - v9.4 ở Releases. libs\*.dll KHÔNG đưa lên repo.
 Review + kế hoạch thương mại hoá (29/09/2026): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md` (mã lỗi A1..F6 dùng trong commit/test).
 Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0 (ExcludeAssets=runtime, không cần
 libs\): 0 lỗi -> dùng được cho CI. AutoCAD 2025/2026 đã lên .NET 10 qua bản cập nhật 08-09/2026.
@@ -51,8 +107,9 @@ Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/
 (`autocad.net`, `autocad.net.core`, `autocad.net.model`) vào 1 thư mục, `dotnet build -c Release -p:AutoCADInstallDir=<thư mục>/
 -p:TargetFrameworkRootPath=<nuget>/microsoft.netframework.referenceassemblies.net48/1.0.3/build/
 -p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
-PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
-tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
+PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói bằng
+`tools/pack_cloud.py` (đúng các bước build.ps1: Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong
+LHB.lsp; bước zip kiểm hướng dẫn test đã ghi đúng MD5).
 MD5 DLL phụ thuộc cả commit đang đứng: SDK .NET 8 nhúng SourceLink (URL + mã commit) vào PDB -> mã PDB nằm trong DLL. Build bản
 phát hành từ commit đã chốt mã, rồi commit riêng phần cập nhật MD5 trong tài liệu (v9.5: DLL build tại commit 795f1a1).
 Bản quyền + cấp key (30/09/2026): `docs/BAN_QUYEN_VA_CAP_KEY.md` (thiết kế, mức an toàn, quy trình cấp / thu hồi / xoay khoá).

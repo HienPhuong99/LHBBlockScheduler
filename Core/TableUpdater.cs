@@ -29,6 +29,8 @@ namespace LHBBlockScheduler.Core
         public bool CountParentBlocks { get; set; }
         public bool SplitByVisibility { get; set; }
         public bool SplitByLayer { get; set; }
+        /// <summary>v9.6: tách theo kích thước (bảng cũ thiếu field -> false).</summary>
+        public bool SplitBySize { get; set; }
         /// <summary>v9.4: đếm cả block trong XREF (bảng cũ thiếu field -> false = bỏ qua XREF như mặc định mới).</summary>
         public bool CountXrefBlocks { get; set; }
         public List<string> SplitAttributeKeys { get; set; } = new List<string>();
@@ -76,6 +78,12 @@ namespace LHBBlockScheduler.Core
     public static class TableUpdater
     {
         public const string ExtKey = "LHB_SCAN";
+
+        /// <summary>
+        /// Phiên bản TableScanInfo bảng mới ghi. 2 = v9 - v9.5; 3 = v9.6 (chủng loại không còn ghép tham số số của block
+        /// động, có tách theo kích thước).
+        /// </summary>
+        public const int ScanInfoVersion = 3;
 
         public static void RunCommand(Document doc)
         {
@@ -201,10 +209,16 @@ namespace LHBBlockScheduler.Core
                 CountParentBlocks = info.CountParentBlocks,
                 SplitByVisibility = info.SplitByVisibility,
                 SplitByLayer = info.SplitByLayer,
+                SplitBySize = info.SplitBySize,
                 SplitAttributeKeys = info.SplitAttributeKeys,
                 CountXrefBlocks = info.CountXrefBlocks,
-                TemplateFilter = onlyTemplate ? template : null
+                TemplateFilter = onlyTemplate ? template : null,
+                // v9.6: bảng xuất từ bản cũ (Version < 3) lưu khoá dòng theo chủng loại kiểu cũ ("Distance1=12320.33") ->
+                // quét lại cũng tính chủng loại kiểu cũ để khoá khớp, không ra dòng SL 0 + dòng mới cho cùng thiết bị
+                LegacyVariant = info.Version < ScanInfoVersion
             };
+            if (options.LegacyVariant)
+                Logger.Log($"[TableUpdater] Bảng Handle {tableId.Handle} xuất từ bản trước v9.6 (Version {info.Version}) -> chủng loại block động tính kiểu cũ");
             var items = BlockExtractor.ExtractFromDatabase(db, roots, options);
             items = TemplateLibraryManager.Apply(items, template, onlyTemplate);
             DuplicateFinder.Detect(items, SettingsManager.Current.DuplicateTolerance, SettingsManager.Current.DuplicateOverlapPercent);

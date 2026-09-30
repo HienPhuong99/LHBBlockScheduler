@@ -94,6 +94,20 @@ namespace LHBBlockScheduler.UI
             }
         }
 
+        /// <summary>
+        /// v9.7: form không đặt Font riêng thì .NET Framework (AutoCAD 2021 - 2024) dùng font mặc định của Windows
+        /// (SystemFonts.DefaultFont, thường Microsoft Sans Serif 8.25), còn .NET 8 / 10 (AutoCAD 2025+) đổi mặc định sang
+        /// Segoe UI 9 -> chữ to hơn, tràn nút / cột cố định kích thước. Đặt lại đúng font .NET Framework dùng để giao diện
+        /// mọi phiên bản AutoCAD giống bản đã test. Bản net48 không đổi gì.
+        /// </summary>
+        public static void KeepFrameworkFont(Control c)
+        {
+#if NET
+            try { c.Font = SystemFonts.DefaultFont; }
+            catch (Exception ex) { Logger.Warn($"[UiKit] Không đặt được font mặc định cho {c.GetType().Name}: {ex.Message}"); }
+#endif
+        }
+
         public static void InitForm(Form f, string title, int w, int h)
         {
             f.Text = title;

@@ -36,7 +36,8 @@ namespace LHBBlockScheduler.UI
             {
                 radii.TryGetValue(DrawingHelper.ItemKey(it), out double r);
                 color = (short)(color % 6 + 1);
-                _grid.Rows.Add((it.DisplayName ?? it.BlockName) + (string.IsNullOrEmpty(it.VisibilityState) ? "" : $" [{it.VisibilityState}]"),
+                _grid.Rows.Add((it.DisplayName ?? it.BlockName) + (string.IsNullOrEmpty(it.VisibilityState) ? "" : $" [{it.VisibilityState}]") +
+                               (string.IsNullOrEmpty(it.Size) ? "" : $" - {it.Size}"),
                                it.Count, r > 0 ? r.ToString("0.##", CultureInfo.InvariantCulture) : "0", color);
             }
 

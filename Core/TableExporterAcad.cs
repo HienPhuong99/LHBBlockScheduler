@@ -672,21 +672,24 @@ namespace LHBBlockScheduler.Core
                 return new SymbolInfo { Mode = "XrefNoImage" };
             }
 
-            // b) Dynamic block có visibility -> copy instance
+            // b) Dynamic block (có chủng loại, hoặc v9.6: block động chỉ có tham số độ dài / góc - chủng loại nay để trống
+            // nhưng vẫn chép hình từ block thật như trước) -> copy instance
             ObjectId instanceId = ObjectId.Null;
-            if (!string.IsNullOrEmpty(item.VisibilityState))
+            if (!string.IsNullOrEmpty(item.VisibilityState) || item.IsDynamic)
             {
                 instanceId = (item.ObjectIds ?? new List<ObjectId>())
                     .FirstOrDefault(id => !id.IsNull && id.IsValid && !id.IsErased);
                 if (instanceId.IsNull)
-                    Logger.Warn($"[TableExporterAcad] '{item.BlockName}' có visibility '{item.VisibilityState}' nhưng không còn instance hợp lệ -> dùng definition.");
+                    Logger.Warn($"[TableExporterAcad] '{item.BlockName}' (block động, chủng loại '{item.VisibilityState}') không còn instance hợp lệ -> dùng definition.");
             }
 
             if (instanceId.IsNull && (defId.IsNull || !defId.IsValid))
                 return new SymbolInfo { Mode = "NoBlock" };
 
             var sym = new SymbolInfo { Mode = instanceId.IsNull ? "Definition" : "InstanceBtr" };
-            string symName = "LHB_SYM_" + SanitizeSymbolName(baseName) + "_" + ShortHash(baseName + "|" + (item.VisibilityState ?? ""));
+            // v9.6: dòng tách theo kích thước có hình riêng (tủ 1200 x 600 khác 600 x 600) -> kích thước vào tên block ký hiệu
+            string symKey = baseName + "|" + (item.VisibilityState ?? "") + (!instanceId.IsNull && !string.IsNullOrEmpty(item.Size) ? "|" + item.Size : "");
+            string symName = "LHB_SYM_" + SanitizeSymbolName(baseName) + "_" + ShortHash(symKey);
             // Nhiều dòng cùng block + chủng loại (tách theo layer / thuộc tính, dòng gộp): dựng block ký hiệu 1 lần / lần xuất
             if (cache != null && cache.TryGetValue(symName, out var built)) return built;
             ObjectId symBtrId = GetOrResetSymbolBtr(db, tr, symName);

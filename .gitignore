@@ -7,8 +7,8 @@ obj/
 # File AutoCAD của Autodesk: tự chép từ thư mục cài AutoCAD (xem README)
 libs/*.dll
 
-# Bản đóng gói: đính kèm ở GitHub Releases
-Dist/*.zip
+# Bản đóng gói: zip (kèm hướng dẫn test) push cùng code trong Dist/ (user 30/09/2026: "cứ push code và nén luôn");
+# thư mục giải nén Dist/LHBBlockScheduler/ không đưa lên (đã nằm trong zip)
 Dist/LHBBlockScheduler/
 Bundle/**/Contents/
 

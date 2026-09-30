@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -47,6 +48,7 @@ namespace LHBBlockScheduler.Core
             ("LHBMAU", "Thư viện block mẫu: thêm / xoá / sắp xếp / chèn block mẫu", false),
             ("LHBLEGEND", "Quét bảng chú thích (Table) có sẵn vào bộ block mẫu", false),
             ("LHBDUPCLEAR", "Xoá vòng đỏ / đường dẫn đánh dấu block trùng", false),
+            ("LHBKHOPCOT", "Khớp độ rộng cột bảng đã xuất theo chữ (như double-click mép cột Excel)", false),
             ("LHBCAPNHAT", "[Premium] Cập nhật bảng đã xuất sau khi sửa bản vẽ (ô đổi tô đỏ)", false),
             ("LHBKHUVUC", "[Premium] Khai báo tầng / khu vực: bảng có cột SL từng khu", false),
             ("LHBNHIEUBV", "[Premium] Thống kê nhiều bản vẽ DWG cùng lúc", false),
@@ -80,7 +82,9 @@ namespace LHBBlockScheduler.Core
         // Phím tắt đã đăng ký với AutoCAD: phím tắt -> lệnh
         private static readonly Dictionary<string, string> _registered = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // Giữ delegate: AutoCAD giữ con trỏ tới callback, GC thu hồi delegate thì gõ phím tắt sẽ crash
-        private static readonly Dictionary<string, CommandCallback> _callbacks = new Dictionary<string, CommandCallback>(StringComparer.OrdinalIgnoreCase);
+        // Giữ delegate CommandCallback cho AutoCAD gọi (không để GC thu). Kiểu object: v9.7 (D4) không để kiểu của API nội bộ
+        // nằm trong khai báo field (thiếu kiểu -> lỗi nạp cả lớp này, hỏng luôn bảng lệnh LHBLENH)
+        private static readonly Dictionary<string, object> _callbacks = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Kết quả đăng ký lần gần nhất: phím tắt -> trạng thái (cột Trạng thái của bảng lệnh, LHBDIAG).</summary>
         public static readonly Dictionary<string, string> Status = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -140,22 +144,48 @@ namespace LHBBlockScheduler.Core
             if (_registered.ContainsKey(alias)) return null;
             try
             {
-                var flags = Utils.IsCommandNameInUse(alias);
-                if (flags == CommandTypeFlags.NoneCmd) return null;
-                var kinds = new List<string>();
-                if ((flags & CommandTypeFlags.CoreCmd) != 0) kinds.Add("lệnh AutoCAD");
-                if ((flags & CommandTypeFlags.ARXCmd) != 0) kinds.Add("lệnh của add-in khác");
-                if ((flags & CommandTypeFlags.LispCmd) != 0) kinds.Add("lệnh LISP");
-                if ((flags & CommandTypeFlags.SetvarCmd) != 0) kinds.Add("biến hệ thống");
-                if ((flags & CommandTypeFlags.ActionMacroCmd) != 0) kinds.Add("action macro");
-                return $"trùng {(kinds.Count > 0 ? string.Join(" / ", kinds) : flags.ToString())} {alias}";
+                string kinds = InternalCommandKinds(alias);
+                return kinds == null ? null : $"trùng {kinds} {alias}";
             }
             catch (Exception ex)
             {
-                Logger.Warn($"[PhimTat] IsCommandNameInUse('{alias}') lỗi: {ex.Message}");
+                Logger.Warn($"[PhimTat] IsCommandNameInUse('{alias}') lỗi: {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
+
+        // ===== v9.7 (D4): API nội bộ Autodesk.AutoCAD.Internal.Utils =====
+        // Autodesk không cam kết giữ API này qua các phiên bản (đã có ở AutoCAD 2021 / 2025 / 2027: build 3 bản không lỗi).
+        // Mọi chỗ dùng kiểu / hàm của nó nằm trong các hàm nhỏ KHÔNG inline dưới đây: AutoCAD sau này bỏ / đổi hàm thì
+        // MissingMethodException / TypeLoadException ném ra đúng tại lời gọi, rơi vào try/catch của nơi gọi (ghi log, phím
+        // tắt báo lỗi) thay vì làm hỏng cả hàm gọi nó lúc JIT biên dịch.
+
+        /// <summary>Tên đang là lệnh / biến hệ thống -> mô tả loại ("lệnh AutoCAD"...), trống -> null.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static string InternalCommandKinds(string alias)
+        {
+            var flags = Utils.IsCommandNameInUse(alias);
+            if (flags == CommandTypeFlags.NoneCmd) return null;
+            var kinds = new List<string>();
+            if ((flags & CommandTypeFlags.CoreCmd) != 0) kinds.Add("lệnh AutoCAD");
+            if ((flags & CommandTypeFlags.ARXCmd) != 0) kinds.Add("lệnh của add-in khác");
+            if ((flags & CommandTypeFlags.LispCmd) != 0) kinds.Add("lệnh LISP");
+            if ((flags & CommandTypeFlags.SetvarCmd) != 0) kinds.Add("biến hệ thống");
+            if ((flags & CommandTypeFlags.ActionMacroCmd) != 0) kinds.Add("action macro");
+            return kinds.Count > 0 ? string.Join(" / ", kinds) : flags.ToString();
+        }
+
+        /// <summary>Đăng ký lệnh thật tên alias trong nhóm LHB_PHIMTAT, gõ lệnh -> run(). Trả delegate phải giữ lại.</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static object InternalAddCommand(string alias, CommandFlags flags, Action run)
+        {
+            CommandCallback cb = () => run();
+            Utils.AddCommand(GroupName, alias, alias, flags, cb);
+            return cb;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void InternalRemoveCommand(string alias) => Utils.RemoveCommand(GroupName, alias);
 
         /// <summary>Phím tắt trùng lệnh tắt trong acad.pgp (vd "C" -> CIRCLE) -> tên lệnh đó, không trùng -> null.</summary>
         public static string FindPgpCommand(string alias)
@@ -221,8 +251,7 @@ namespace LHBBlockScheduler.Core
                 try
                 {
                     string alias = a.Alias;
-                    CommandCallback cb = () => Run(info, alias);
-                    Utils.AddCommand(GroupName, alias, alias, info.Flags, cb);
+                    object cb = InternalAddCommand(alias, info.Flags, () => Run(info, alias));
                     _registered[alias] = info.Name;
                     _callbacks[alias] = cb;
                     Status[alias] = "Đang dùng";
@@ -230,6 +259,7 @@ namespace LHBBlockScheduler.Core
                 }
                 catch (Exception ex)
                 {
+                    // MissingMethodException / TypeLoadException = phiên bản AutoCAD này không còn API nội bộ (D4)
                     Status[a.Alias] = "Lỗi đăng ký: " + ex.Message;
                     Logger.Error(ex, $"[PhimTat] AddCommand '{a.Alias}' -> {a.Command}");
                 }
@@ -245,7 +275,7 @@ namespace LHBBlockScheduler.Core
             {
                 try
                 {
-                    Utils.RemoveCommand(GroupName, alias);
+                    InternalRemoveCommand(alias);
                 }
                 catch (Exception ex)
                 {

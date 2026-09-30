@@ -12,6 +12,12 @@
 ;;; Sau NETLOAD hỏi DLL (hàm lhb-dllinfo) xem AutoCAD thật sự đang chạy bản nào: .NET không gỡ được DLL
 ;;; đã nạp, nếu bản cũ đã nạp trước trong phiên (vd do Startup Suite) thì báo tắt hẳn AutoCAD.
 ;;; KHÔNG nạp LHBLoader.dll: loader chỉ dùng trên máy build (đọc %APPDATA%\...\Runtime).
+;;; v9.7: mỗi dòng AutoCAD 1 bản DLL, chọn theo ACADVER:
+;;;   24.x (AutoCAD 2021 - 2024, .NET Framework 4.8) -> <thư mục add-in>\LHBBlockScheduler.dll
+;;;   25.x (AutoCAD 2025 - 2026, .NET 8)             -> <thư mục add-in>\net8\LHBBlockScheduler.dll
+;;;   26.x trở lên (AutoCAD 2027, .NET 10)           -> <thư mục add-in>\net10\LHBBlockScheduler.dll
+;;; Thư mục add-in vẫn nhận ra bằng build-info.txt + MD5 bản 2021 - 2024 ở thư mục gốc; bản net8 / net10 kiểm thêm
+;;; build-info.txt trong thư mục con của nó.
 ;;; ==========================================================================
 
 (vl-load-com)
@@ -19,17 +25,23 @@
 (setq *LHB_REG_KEY* "HKEY_CURRENT_USER\\Software\\LHBBlockScheduler")
 
 ;; MD5 của DLL đi kèm. Còn nguyên chữ mẫu (chạy thẳng từ thư mục build) = không kiểm tra MD5.
+;; *LHB_EXPECTED_MD5* = bản AutoCAD 2021 - 2024 ở thư mục gốc, cũng là "dấu" nhận ra đúng thư mục add-in.
 (setq *LHB_EXPECTED_MD5* "@@LHB_BUILD_MD5@@")
+;; v9.7: bản AutoCAD 2025 - 2026 (thư mục con net8) và AutoCAD 2027 (thư mục con net10).
+;; Còn chữ mẫu trong khi *LHB_EXPECTED_MD5* đã có MD5 = gói này không có bản cho dòng AutoCAD đó.
+(setq *LHB_EXPECTED_MD5_NET8* "@@LHB_BUILD_MD5_NET8@@")
+(setq *LHB_EXPECTED_MD5_NET10* "@@LHB_BUILD_MD5_NET10@@")
 
 ;; Phiên bản add-in đi kèm (build.ps1 ghi từ DLL, v9.4). Còn chữ mẫu = chạy thẳng từ thư mục build.
 (setq *LHB_VERSION* "@@LHB_VERSION@@")
 
 (defun c:LHBHELP ()
   (princ "\n==================================================================")
-  (princ "\n  LHBBlockScheduler - DANH SÁCH LỆNH KHẢ DỤNG:")
+  (princ (strcat "\n  LHBBlockScheduler - DANH SÁCH LỆNH KHẢ DỤNG (bản cho " (lhb:TargetName) "):"))
   (princ "\n  - LHBSCAN       : Mở giao diện Thống kê Block đầy đủ tính năng")
   (princ "\n  - LHBMAU        : Thư viện block mẫu (thêm / xoá / sắp xếp / chèn block mẫu)")
   (princ "\n  - LHBLENH       : Bảng danh sách lệnh, chạy lệnh, đổi phím tắt (mặc định gõ LHB)")
+  (princ "\n  - LHBKHOPCOT    : Khớp độ rộng cột bảng đã xuất theo chữ (như Excel)")
   (princ (strcat "\n  ---- PREMIUM" (if (vl-string-search "LHB_VERSION" *LHB_VERSION*) "" (strcat " (" *LHB_VERSION* ")")) " ----"))
   (princ "\n  - LHBKHUVUC     : Tầng / khu vực -> bảng có cột SL từng khu")
   (princ "\n  - LHBCAPNHAT    : Cập nhật bảng đã xuất sau khi sửa bản vẽ")
@@ -58,6 +70,48 @@
 ;; T nếu LISP này có MD5 thật (đã đóng gói bằng build.ps1)
 (defun lhb:Md5Check-p ()
   (not (vl-string-search "LHB_BUILD_MD5" *LHB_EXPECTED_MD5*))
+)
+
+;; v9.7: số phiên bản AutoCAD đang chạy (ACADVER "25.0s (LMS Tech)" -> 25.0)
+(defun lhb:AcadVer ()
+  (atof (getvar "ACADVER"))
+)
+
+;; v9.7: thư mục con chứa DLL cho AutoCAD đang chạy: "" = thư mục gốc (2021 - 2024), "net8" (2025 - 2026),
+;; "net10" (2027; AutoCAD mới hơn cũng thử bản .NET 10, add-in tự báo "chưa kiểm")
+(defun lhb:TargetSub ( / v)
+  (setq v (lhb:AcadVer))
+  (cond ((< v 25.0) "")
+        ((< v 26.0) "net8")
+        (t "net10"))
+)
+
+;; Tên dòng AutoCAD của bản DLL cần nạp (để báo trên dòng lệnh)
+(defun lhb:TargetName ( / sub)
+  (setq sub (lhb:TargetSub))
+  (cond ((= sub "") "AutoCAD 2021 - 2024")
+        ((= sub "net8") "AutoCAD 2025 - 2026")
+        (t "AutoCAD 2027"))
+)
+
+;; MD5 cần có của DLL cho AutoCAD đang chạy
+(defun lhb:TargetMd5 ( / sub)
+  (setq sub (lhb:TargetSub))
+  (cond ((= sub "") *LHB_EXPECTED_MD5*)
+        ((= sub "net8") *LHB_EXPECTED_MD5_NET8*)
+        (t *LHB_EXPECTED_MD5_NET10*))
+)
+
+;; T nếu gói này (đã đóng gói) KHÔNG có bản cho dòng AutoCAD đang chạy (MD5 còn chữ mẫu)
+(defun lhb:TargetMissing-p ()
+  (and (lhb:Md5Check-p)
+       (vl-string-search "LHB_BUILD_MD5" (lhb:TargetMd5)))
+)
+
+;; Thư mục chứa DLL cần nạp, trong thư mục gốc add-in
+(defun lhb:TargetDir (root / sub)
+  (setq sub (lhb:TargetSub))
+  (if (= sub "") root (strcat root "\\" sub))
 )
 
 ;; Trả về thư mục (không có "\" cuối) nếu trong đó có LHBBlockScheduler.dll, ngược lại nil
@@ -117,6 +171,17 @@
   found
 )
 
+;; v9.7: chọn DLL trong thư mục con net8 / net10 -> dùng thư mục gốc (thư mục cha) nếu đó là thư mục add-in
+(defun lhb:RootOf (dir / parent)
+  (if (and dir
+           (member (strcase (vl-filename-base dir)) '("NET8" "NET10"))
+           (setq parent (vl-filename-directory dir))
+           (lhb:ValidDir parent))
+    parent
+    dir
+  )
+)
+
 ;; Hộp thoại chọn DLL, nhớ thư mục vào registry
 (defun lhb:AskDir ( / lastDir picked dir)
   (setq lastDir (vl-registry-read *LHB_REG_KEY* "InstallDir"))
@@ -124,7 +189,7 @@
     (getfiled "Chọn file LHBBlockScheduler.dll trong thư mục vừa giải nén"
               (if (lhb:ValidDir lastDir) (strcat lastDir "\\") "")
               "dll" 0))
-  (if (and picked (setq dir (lhb:ValidDir (vl-filename-directory picked))))
+  (if (and picked (setq dir (lhb:ValidDir (lhb:RootOf (vl-filename-directory picked)))))
     (progn
       (vl-registry-write *LHB_REG_KEY* "InstallDir" dir)
       (if (and (lhb:Md5Check-p) (not (lhb:DirMatches dir)))
@@ -178,11 +243,11 @@
   )
 )
 
-;; T nếu bản đang chạy đúng bản của LISP này
+;; T nếu bản đang chạy đúng bản của LISP này (v9.7: đúng bản cho dòng AutoCAD đang chạy)
 (defun lhb:LoadedMatches (info)
   (and info
        (or (not (lhb:Md5Check-p))
-           (= (strcase (cadr info)) *LHB_EXPECTED_MD5*)))
+           (= (strcase (cadr info)) (lhb:TargetMd5))))
 )
 
 (defun lhb:WarnOldLoaded (info)
@@ -196,33 +261,60 @@
       (princ "\n   b) Bản cũ (trước 29/09/2026) đã nạp trước đó trong phiên này.")
     )
   )
-  (princ (strcat "\n  Bản cần dùng : MD5 " *LHB_EXPECTED_MD5*))
+  ;; v9.7: đang chạy đúng gói nhưng nhầm bản (DLL 2021 - 2024 ở thư mục gốc nạp vào AutoCAD 2025+, thường do NETLOAD tay)
+  (if (and info (/= (lhb:TargetSub) "") (lhb:Md5Check-p) (= (strcase (cadr info)) *LHB_EXPECTED_MD5*))
+    (princ (strcat "\n  (Đó là bản cho AutoCAD 2021 - 2024 ở thư mục gốc, nạp nhầm. AutoCAD này cần DLL trong thư mục "
+                   (lhb:TargetSub) ")"))
+  )
+  (princ (strcat "\n  Bản cần dùng : MD5 " (lhb:TargetMd5) " (bản cho " (lhb:TargetName) ")"))
   (princ "\n  AutoCAD không gỡ được DLL đã nạp. Cách xử lý:")
   (princ "\n   1. Gõ APPLOAD > nút Contents (Startup Suite): xoá LHB.lsp cũ nếu có.")
   (princ "\n   2. Tắt HẲN AutoCAD, mở lại, rồi kéo thả LHB.lsp của bản mới.")
   (princ "\n******************************************************************\n")
 )
 
-(defun lhb:NetloadDir (dir / dll info)
-  (setq dll (strcat dir "\\LHBBlockScheduler.dll"))
-  (setvar "CMDECHO" 0)
-  (vl-cmdf "_.NETLOAD" dll)
-  (setvar "CMDECHO" 1)
-  (setq info (lhb:LoadedInfo))
+;; dir = thư mục gốc add-in. v9.7: nạp DLL của dòng AutoCAD đang chạy (thư mục gốc / net8 / net10)
+(defun lhb:NetloadDir (dir / tdir dll info)
+  (setq tdir (lhb:TargetDir dir)
+        dll  (strcat tdir "\\LHBBlockScheduler.dll"))
   (cond
-    ((not (lhb:LoadedMatches info))
-     (lhb:WarnOldLoaded info))
+    ((not (findfile dll))
+     (princ (strcat "\n[LHB LỖI] Không có bản cho " (lhb:TargetName) ": thiếu file " dll))
+     (princ "\n  Giải nén lại ĐỦ file zip (giữ nguyên các thư mục net8, net10 bên trong) rồi kéo thả LHB.lsp.\n"))
+    ;; Bản net8 / net10: build-info.txt trong thư mục con phải đúng MD5 (bản gốc đã kiểm lúc tìm thư mục)
+    ((and (lhb:Md5Check-p)
+          (/= tdir dir)
+          (not (equal (lhb:ReadBuildMd5 tdir) (lhb:TargetMd5))))
+     (princ (strcat "\n[LHB LỖI] DLL trong " tdir " KHÁC bản của file LHB.lsp này (MD5 "
+                    (vl-princ-to-string (lhb:ReadBuildMd5 tdir)) " / cần " (lhb:TargetMd5) ")."))
+     (princ "\n  Giải nén lại file zip vào thư mục mới rồi kéo thả LHB.lsp trong thư mục đó.\n"))
     (t
-     (setq *LHB_PLUGIN_LOADED* T)
-     (princ (strcat "\n[LHB] Đã nạp: " (car info)))
-     (princ (strcat "\n[LHB] MD5: " (cadr info) (if (lhb:Md5Check-p) " (đúng bản)" "")))
-     (c:LHBHELP))
+     (setvar "CMDECHO" 0)
+     (vl-cmdf "_.NETLOAD" dll)
+     (setvar "CMDECHO" 1)
+     (setq info (lhb:LoadedInfo))
+     (cond
+       ((not (lhb:LoadedMatches info))
+        (lhb:WarnOldLoaded info))
+       (t
+        (setq *LHB_PLUGIN_LOADED* T)
+        (princ (strcat "\n[LHB] Đã nạp bản cho " (lhb:TargetName) ": " (car info)))
+        (princ (strcat "\n[LHB] MD5: " (cadr info) (if (lhb:Md5Check-p) " (đúng bản)" "")))
+        (c:LHBHELP))
+     ))
   )
 )
 
 (defun lhb:LoadPlugin ( / dir info)
   (setq info (lhb:LoadedInfo))
   (cond
+    ;; v9.7: AutoCAD 2020 trở về trước (ACADVER < 24) không chạy được bản nào
+    ((< (lhb:AcadVer) 24.0)
+     (princ (strcat "\n[LHB LỖI] AutoCAD này (ACADVER " (getvar "ACADVER") ") chưa được hỗ trợ: cần AutoCAD 2021 trở lên.\n")))
+    ;; v9.7: gói thiếu bản cho dòng AutoCAD này (vd build trên máy chưa có .NET 10 SDK chỉ có bản 2021 - 2024)
+    ((lhb:TargetMissing-p)
+     (princ (strcat "\n[LHB LỖI] Gói add-in này không có bản cho " (lhb:TargetName)
+                    " (ACADVER " (getvar "ACADVER") "). Cần gói có thư mục " (lhb:TargetSub) ".\n")))
     ;; Đã nạp đúng bản trong phiên này
     ((lhb:LoadedMatches info)
      (setq *LHB_PLUGIN_LOADED* T)

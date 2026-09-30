@@ -31,6 +31,7 @@ namespace LHBBlockScheduler.UI
 
         public SuggestMergeDialog(List<BlockItem> items, int threshold)
         {
+            UiKit.KeepFrameworkFont(this);
             Text = $"Gợi ý gộp Block theo hình dạng (dHash <= {threshold})";
             Width = 720;
             Height = 480;

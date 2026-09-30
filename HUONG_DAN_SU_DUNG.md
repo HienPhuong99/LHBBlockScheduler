@@ -6,9 +6,19 @@
 
 ## 📋 Yêu cầu
 
-- ✅ AutoCAD **2021 – 2024** bản đầy đủ 64-bit (AutoCAD LT không chạy được add-in .NET)
+- ✅ AutoCAD **2021 – 2027** bản đầy đủ 64-bit, kể cả AutoCAD MEP / Electrical / Civil 3D cùng đời (AutoCAD LT không chạy
+  được add-in .NET)
 - ✅ Windows 10/11
-- ⚠️ AutoCAD **2025 trở lên** chạy .NET 8/10: bản hiện tại (build .NET Framework 4.8) **chưa chạy được**, sẽ có bản riêng.
+- ℹ️ Từ v9.7 trong zip có 3 bản DLL, `LHB.lsp` tự chọn theo AutoCAD đang mở (không cần cài thêm .NET):
+
+| AutoCAD | .NET | DLL trong thư mục add-in |
+|---|---|---|
+| 2021, 2022, 2023, 2024 | .NET Framework 4.8 | `LHBBlockScheduler.dll` (thư mục gốc) |
+| 2025, 2026 (cả khi đã cập nhật .NET 10) | .NET 8 | `net8\LHBBlockScheduler.dll` |
+| 2027 | .NET 10 | `net10\LHBBlockScheduler.dll` |
+
+> Thư viện block mẫu (`ThuVienMau`), `log.txt`, file `LHBDIAG_*.txt` luôn nằm ở **thư mục gốc** add-in (cạnh `LHB.lsp`),
+> dùng chung cho mọi phiên bản AutoCAD trên máy. Cài đặt, key bản quyền, dùng thử cũng dùng chung.
 
 ---
 
@@ -18,9 +28,11 @@
    Không chạy thẳng trong file zip.
 2. Mở AutoCAD, mở 1 bản vẽ bất kỳ.
 3. **Kéo thả** file `LHB.lsp` (trong thư mục vừa giải nén) vào vùng vẽ.
-   - LISP tự tìm và nạp đúng `LHBBlockScheduler.dll` đi kèm (kiểm tra MD5 trong `build-info.txt`, không nạp nhầm bản cũ).
+   - LISP tự tìm và nạp đúng `LHBBlockScheduler.dll` đi kèm (kiểm tra MD5 trong `build-info.txt`, không nạp nhầm bản cũ),
+     đúng bản cho AutoCAD đang mở (bảng trên). Giải nén **đủ** zip, giữ nguyên thư mục `net8`, `net10`.
    - Có hộp thoại bảo mật → chọn **Load** / **Always Load**.
-4. Dòng lệnh hiện `[LHB] v9.x Premium ...` là xong. Gõ `LHBSCAN` để thống kê, `LHBHELP` xem danh sách lệnh.
+4. Dòng lệnh hiện `[LHB] Đã nạp bản cho AutoCAD ...` và `[LHB] v9.x Premium ...` là xong. Gõ `LHBSCAN` để thống kê,
+   `LHBHELP` xem danh sách lệnh.
 
 ### Tự nạp mỗi lần mở AutoCAD
 
@@ -36,7 +48,8 @@
 ## 🔧 Cách 2: Nạp thủ công bằng NETLOAD
 
 1. Gõ `NETLOAD` → Enter.
-2. Chọn file `LHBBlockScheduler.dll` trong thư mục đã giải nén → **Open**.
+2. Chọn file `LHBBlockScheduler.dll` **đúng bản** trong thư mục đã giải nén (AutoCAD 2021 – 2024: thư mục gốc; 2025 – 2026:
+   thư mục `net8`; 2027: thư mục `net10`) → **Open**. Chọn nhầm bản thì dòng lệnh báo `[LHB CẢNH BÁO] DLL này là bản cho ...`.
 3. Có hộp thoại bảo mật → **Load** / **Always Load**.
 
 Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suite).
@@ -89,6 +102,27 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 - Chuyển sang bản vẽ khác: cửa sổ thống kê **tự ẩn**, quay lại bản vẽ đó thì hiện lại; đóng bản vẽ thì cửa sổ tự đóng.
 - **Xuất bảng** chèn vào không gian đang làm việc: đang ở **Layout** thì bảng nằm trên Layout (hỏi dùng tỉ lệ 1 cho giấy).
 
+### Chủng loại, kích thước của block động (từ v9.6)
+
+- Cột **Chủng loại** = trạng thái **Visibility** của block động (vd `2 HƯỚNG`, `BỘT ABC 8KG`). Block động không có Visibility
+  thì lấy tham số dạng chữ (Lookup...). Tham số **độ dài / rộng / cao, góc xoay, toạ độ, lật** (`Distance1`, `Angle1`,
+  `Position1 X`, `Flip state1`...) **không** làm chủng loại → đầu báo tia chiếu kéo dài bao nhiêu cũng chung 1 dòng, chủng loại trống.
+- Ô **Tách theo kích thước** (hàng 2, mặc định tắt): bật → mỗi độ dài khác nhau thành 1 dòng riêng, hiện thêm cột
+  **Kích thước** (vd `12320`; 2 tham số: `1200 x 600`), bảng xuất CAD / Excel có cột này. Tắt → không tách, ẩn cột.
+  Chỉ tính tham số độ dài (Linear, Polar, XY); không tính góc xoay và toạ độ điểm (vị trí nhãn...). Số làm tròn còn
+  khoảng 4 chữ số có nghĩa (12320.33 → `12320`, 12.3204 → `12.32`), đơn vị = đơn vị bản vẽ. Sửa được trong ô như cột chữ khác;
+  double-click tiêu đề cột để đổi tên (vd thành "Độ dài").
+- Các nút **Căn lề Trái / Giữa / Phải** chuyển lên hàng 1 (cạnh nút Premium).
+
+### Bảng xuất co giãn như Excel
+
+- Bảng kiểu **AutoCAD Table** co giãn được như Excel: chọn bảng → kéo **grip ▲ trên đầu cột** để đổi độ rộng; chữ dài tự
+  xuống dòng, dòng tự cao lên; ô ký hiệu tự co theo ô. Kéo grip ở góc phải để giãn cả bảng.
+- Độ rộng cột lúc xuất = vừa chữ dài nhất trong cột (như double-click mép cột Excel), rộng hơn nếu cột trên form được kéo rộng hơn.
+  Trên form: kéo mép tiêu đề cột để đổi rộng, **double-click mép cột** để vừa chữ.
+- Lệnh **`LHBKHOPCOT`** (từ v9.6, không cần Premium): chọn bảng hoặc Enter (mọi bảng LHB) → mỗi cột chữ khớp lại độ rộng theo
+  chữ đang có (sau khi sửa chữ trong bảng, sau `LHBCAPNHAT` thêm dòng tên dài...). Cột ký hiệu và tiêu đề gộp giữ nguyên.
+
 > Từ v9.1 chỉ còn **thư viện block mẫu** (bỏ thư viện thiết bị cũ: nút Quy hoạch / Thêm vào TV / Chỉ đếm block có trong TV). Thư viện cũ đã có dữ liệu được tự chuyển 1 lần thành bộ mẫu tên `TV cu <tên>` (vd `TV cu default`), chọn ở ô **Bộ block mẫu** nếu muốn dùng.
 
 ### Lệnh `LHBLEGEND` — Lấy bảng Legend có sẵn làm block mẫu
@@ -100,7 +134,9 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 ### Lệnh `LHBMAU` — Thư viện block mẫu
 
 1. Gõ `LHBMAU` (hoặc nút **Block mẫu...** trên cửa sổ thống kê) → hộp thoại **Thông tin block mẫu**.
-2. **Thêm từ bản vẽ**: quét chọn các block mẫu (mỗi tên block + chủng loại thành 1 dòng).
+2. **Thêm từ bản vẽ**: quét chọn các block mẫu (mỗi tên block + chủng loại thành 1 dòng). Block động chỉ có tham số độ dài / góc
+   (vd đầu báo tia chiếu) có chủng loại trống = khớp mọi kích thước. Từ v9.6, block mẫu thêm từ bản cũ có chủng loại dạng
+   `Distance1=47116.93...` tự để trống khi mở hộp thoại (nếu bản vẽ đang mở có block đó); lúc quét vẫn khớp đúng dù chưa sửa.
 3. **Double-click** ô để sửa **Tên thống kê**, **Ghi chú** (hoặc chọn ô rồi gõ luôn / bấm F2); **Đơn vị** click 1 lần là xổ danh sách. Nút **▲ ▼** đổi thứ tự (= thứ tự trong bảng xuất), **X** xoá 1 dòng.
 4. Xoá nhiều dòng: **Shift + click** chọn liền mạch, **Ctrl + click** chọn từng dòng, **Ctrl + A** chọn hết, rồi bấm phím **Delete** hoặc nút **Xoá dòng chọn**.
 5. **Lưu thông tin**. Thư viện lưu cạnh add-in: `ThuVienMau\<bộ>.json` + `<bộ>.dwg` (hình block). Chưa lưu thì bấm Thoát > No để bỏ mọi thay đổi.
@@ -210,7 +246,7 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 2. Giải nén bản mới ra **thư mục mới** (giữ thư mục cũ tới khi bản mới chạy tốt). Thư viện block mẫu (`ThuVienMau`) tự
    chép sang thư mục mới từ bản dự phòng trong `%APPDATA%\LHBBlockScheduler\ThuVienMau`.
 3. Mở AutoCAD, kéo thả `LHB.lsp` của bản mới (Startup Suite: bỏ `LHB.lsp` cũ, thêm `LHB.lsp` mới).
-4. Gõ `LHBVERSION` kiểm tra MD5 đúng với file hướng dẫn test của bản đó.
+4. Gõ `LHBVERSION` kiểm tra MD5 đúng với file hướng dẫn test của bản đó (mỗi dòng AutoCAD 1 MD5, xem dòng "bản DLL cho").
 
 > ⚠️ **Quan trọng:** AutoCAD giữ DLL đã nạp tới khi tắt hẳn chương trình — không chép đè DLL khi AutoCAD đang mở.
 
@@ -228,6 +264,7 @@ Nếu gặp lỗi, gõ `LHBLOG` → Enter → file log sẽ mở bằng Notepad.
 | `LHBRELOAD` | Nạp lại phiên bản mới nhất từ thư mục Runtime (dành cho Dev, không cần tắt CAD) |
 | `LHBLOG` | Mở file nhật ký ghi lỗi (log.txt) |
 | `LHBDUPCLEAR` | Xoá vòng đỏ và đường dẫn đánh dấu block trùng (layer `LHB_BLOCK_TRUNG`, không in) |
+| `LHBKHOPCOT` | Khớp độ rộng cột bảng AutoCAD Table đã xuất theo chữ (như double-click mép cột Excel) |
 | `LHBHELP` | In danh sách các lệnh khả dụng ra Command Line |
 | `LHBKHUVUC` | ⭐ Tầng / khu vực: bảng có cột SL từng khu |
 | `LHBCAPNHAT` | ⭐ Cập nhật bảng AutoCAD Table đã xuất sau khi sửa bản vẽ |
