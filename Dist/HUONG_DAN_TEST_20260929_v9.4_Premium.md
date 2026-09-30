@@ -1,14 +1,14 @@
 # Hướng dẫn test LHBBlockScheduler — bản 29/09/2026 (v9.4 Premium "ổn định")
 
 **File cần nhận:** `LHBBlockScheduler_20260929_v9.4_Premium.zip`
-**MD5 DLL đúng:** `DA84C6DB97E8BFAFD4437EE1A1302C6C`
+**MD5 DLL đúng:** `5F5B53084349716CB7D9A6FF4054DE30`
 **Máy test:** AutoCAD 2021 (chạy được AutoCAD 2021 – 2024; 2025 trở lên chưa hỗ trợ)
 
 v9.4 = v9.3 (Premium miễn phí, ký hiệu đều cỡ) + **sửa các lỗi đếm sai / ổn định đã phát hiện khi review**
 (`docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md`, mục 3). Giao diện gần như giữ nguyên, thêm ô **Đếm trong XREF** và thanh trạng thái dưới form.
 
-> Bản này build trên máy build tự động, tham chiếu AutoCAD 2021 bằng gói chính thức `AutoCAD.NET 24.0` của Autodesk
-> (không dùng `libs\`). Nếu NETLOAD / kéo thả `LHB.lsp` báo lỗi nạp: gửi ảnh dòng lệnh + file `LHBDIAG_*.txt`.
+> Zip build trên máy dev ngày 30/09/2026 bằng DLL AutoCAD 2021 trong `libs\`, giống các bản trước.
+> Nếu NETLOAD / kéo thả `LHB.lsp` báo lỗi nạp: gửi ảnh dòng lệnh + file `LHBDIAG_*.txt`.
 
 ## Bản này sửa gì
 
@@ -34,7 +34,7 @@ Chuẩn bị 1 bản vẽ test (lưu ra file DWG), có vài block thiết bị (
 
 | # | Thao tác | Kết quả đúng |
 |---|---|---|
-| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD, kéo thả `LHB.lsp`. Gõ `LHBVERSION`, rồi `LHBHELP` | MD5 = `DA84C6DB97E8BFAFD4437EE1A1302C6C`. Dòng lệnh có `[LHB] v9.4 Premium - Premium miễn phí...`. `LHBHELP` có dòng `---- PREMIUM (v9.4 Premium) ----` |
+| 1 | Tắt hẳn AutoCAD, giải nén zip vào **thư mục mới**, mở AutoCAD, kéo thả `LHB.lsp`. Gõ `LHBVERSION`, rồi `LHBHELP` | MD5 = `5F5B53084349716CB7D9A6FF4054DE30`. Dòng lệnh có `[LHB] v9.4 Premium - Premium miễn phí...`. `LHBHELP` có dòng `---- PREMIUM (v9.4 Premium) ----` |
 | 2 | **ARRAY**: `ARRAY` (Rectangular, liên kết - mặc định) 1 block thiết bị thành 3 hàng × 4 cột. `LHBSCAN`, chọn cả mảng | Có dòng block đó **SL = 12** (v9.3: không có dòng). Cột **Nguồn**: `Model + ARRAY`. Thanh trạng thái dưới form: `1 ARRAY (12 block bên trong)`. Double-click ô Nguồn / Ký hiệu → zoom đúng vùng mảng, 12 block sáng lên |
 | 3 | **MINSERT**: gõ `MINSERT` → tên block → điểm chèn → tỉ lệ 1 → góc xoay 30 → hàng 2 → cột 3 → khoảng cách hàng / cột. `LHBSCAN` chọn nó | **SL = 6**, Nguồn `+ MINSERT`, thanh trạng thái `1 MINSERT = 6 phần tử`. Premium ▾ > Đánh số thiết bị: 6 số nằm đúng 6 vị trí |
 | 4 | **XREF**: `XATTACH` 1 bản vẽ kiến trúc (có block cửa, nội thất). `LHBSCAN` → `ALL` | Không còn dòng tên XREF / block kiến trúc. Thanh trạng thái `bỏ qua 1 XREF` |
