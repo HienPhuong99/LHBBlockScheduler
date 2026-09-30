@@ -36,7 +36,10 @@
    (build, đóng gói, tài liệu, đẩy GitHub + Release) rồi báo cáo 1 lần.
 5. Mã nguồn ở GitHub private HienPhuong99/LHBBlockScheduler: commit + push sau mỗi bản, zip đính kèm Releases.
 
-## Trạng thái (29/09/2026): bản v9.4 Premium "ổn định" đã phát hành, CHƯA có kết quả test (v9 – v9.3 cũng chưa)
+## Trạng thái (30/09/2026): bản v9.4 Premium "ổn định" đã phát hành, CHƯA có kết quả test (v9 – v9.3 cũng chưa)
+v9.4 làm ở phiên cloud trên nhánh PR #1; 30/09/2026 user bảo gộp PR vào main + tạo Release `v9.4-premium`.
+Zip phát hành build lại trên máy dev bằng libs\ -> MD5 DLL `5F5B53084349716CB7D9A6FF4054DE30` (bản build cloud MD5
+`DA84C6DB97E8BFAFD4437EE1A1302C6C` không phát hành). Zip + hướng dẫn test cũng chép vào `C:\Users\vsp\Downloads\tool\` như các bản cũ.
 Repo GitHub (private): HienPhuong99/LHBBlockScheduler. Zip đính kèm ở Releases. libs\*.dll KHÔNG đưa lên repo.
 Review + kế hoạch thương mại hoá (29/09/2026): `docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md` (mã lỗi A1..F6 dùng trong commit/test).
 Đã build thử net48/net8.0-windows/net10.0-windows bằng NuGet `AutoCAD.NET` 24.0/25.0.1/26.0 (ExcludeAssets=runtime, không cần
@@ -47,7 +50,7 @@ Build trên máy không có Windows/AutoCAD (phiên cloud): chép AcMgd/AcDbMgd/
 -p:CustomAfterMicrosoftCommonTargets=<file targets rỗng định nghĩa lại BuildLoaderAndRuntimeCopy + CleanLoader>` (bỏ bước
 PowerShell / %APPDATA% của máy dev); DLL tham chiếu acmgd/acdbmgd/accoremgd 24.0.0.0 giống build bằng libs\. Đóng gói làm
 tay đúng các bước build.ps1 (Dist, build-info.txt UTF-8 BOM, thay @@LHB_BUILD_MD5@@ + @@LHB_VERSION@@ trong LHB.lsp).
-v9.4 Premium (MD5 `DA84C6DB97E8BFAFD4437EE1A1302C6C`, `Dist\HUONG_DAN_TEST_20260929_v9.4_Premium.md`) = v9.3 + sửa P0/P1 của
+v9.4 Premium (MD5 phát hành `5F5B53084349716CB7D9A6FF4054DE30`, `Dist\HUONG_DAN_TEST_20260929_v9.4_Premium.md`) = v9.3 + sửa P0/P1 của
 review (user 29/09: "Sửa trước những lỗi đã phát hiện và tồn đọng"):
 - A1-A5 `BlockExtractor` viết lại phần duyệt: `Classify` -> Table (bỏ), Xref (bỏ, hoặc vỏ trong suốt khi
   `ExtractionOptions.CountXrefBlocks` / settings `CountXrefBlocks` / ô "Đếm trong XREF"), Container (block ẩn danh *U không
