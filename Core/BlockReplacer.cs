@@ -106,13 +106,15 @@ namespace LHBBlockScheduler.Core
                 foreach (ObjectId id in target)
                     if (tr.GetObject(id, OpenMode.ForRead) is AttributeDefinition ad && !ad.Constant) attDefs.Add(ad);
 
+                // v9.4: HashSet thay List.Contains trong vòng lặp (thay 5000 block trước đây O(n²))
+                var done = new HashSet<ObjectId>();
                 foreach (var item in items)
                 {
                     foreach (var inst in item.Instances ?? new List<BlockInstanceRef>())
                     {
                         if (!inst.IsTopLevel) { res.SkippedNested++; continue; }
                         var oldId = inst.Path[0];
-                        if (oldId.IsErased || res.OldIds.Contains(oldId)) continue;
+                        if (oldId.IsErased || !done.Add(oldId)) continue;
                         try
                         {
                             var old = (BlockReference)tr.GetObject(oldId, OpenMode.ForWrite);
@@ -170,7 +172,7 @@ namespace LHBBlockScheduler.Core
                 tr.Commit();
                 Logger.Log($"[BlockReplacer] Thay {res.Replaced} block sang '{target.Name}'" +
                            (string.IsNullOrEmpty(o.TargetVisibility) ? "" : $" [{o.TargetVisibility}]") +
-                           $", bỏ {res.SkippedNested} block lồng, co theo kích thước={o.FitSize}, giữ góc={o.KeepRotation}, giữ layer={o.KeepLayer}");
+                           $", bỏ {res.SkippedNested} block lồng / ARRAY / phần tử MINSERT, co theo kích thước={o.FitSize}, giữ góc={o.KeepRotation}, giữ layer={o.KeepLayer}");
             }
             return res;
         }

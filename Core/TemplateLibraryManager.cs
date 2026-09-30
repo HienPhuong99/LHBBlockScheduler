@@ -191,15 +191,8 @@ namespace LHBBlockScheduler.Core
         {
             if (string.IsNullOrWhiteSpace(setName)) setName = DefaultSetName;
             string path = JsonPath(setName);
-            TemplateLibrary lib = null;
-            try
-            {
-                if (File.Exists(path)) lib = JsonHelper.Deserialize<TemplateLibrary>(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, $"[TemplateLibrary] Đọc '{path}' thất bại");
-            }
+            // v9.4: file hỏng thì đọc bản dự phòng <bộ>.json.bak (ghi an toàn giữ lại bản trước)
+            TemplateLibrary lib = FileHelper.ReadWithBackup(path, JsonHelper.Deserialize<TemplateLibrary>, $"[TemplateLibrary] bộ '{setName}'");
 
             // DataContractJsonSerializer không chạy property initializer -> bù giá trị mặc định
             lib ??= new TemplateLibrary();
@@ -225,7 +218,8 @@ namespace LHBBlockScheduler.Core
             int deleted = 0;
             foreach (var dir in new[] { Folder, BackupFolder }.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                foreach (var ext in new[] { ".json", ".dwg" })
+                // .json.bak: bản dự phòng của ghi an toàn (v9.4) - không xoá thì Load đọc lại bộ đã xoá
+                foreach (var ext in new[] { ".json", ".dwg", ".json.bak" })
                 {
                     string path = Path.Combine(dir, setName + ext);
                     if (!File.Exists(path)) continue;
@@ -240,7 +234,8 @@ namespace LHBBlockScheduler.Core
         public static void Save(TemplateLibrary lib)
         {
             string path = JsonPath(lib.Name);
-            File.WriteAllText(path, JsonHelper.Serialize(lib), System.Text.Encoding.UTF8);
+            // v9.4: ghi file tạm rồi thay (giữ .bak) -> mất điện / CAD crash giữa lúc ghi không làm hỏng bộ mẫu
+            FileHelper.WriteAllTextAtomic(path, JsonHelper.Serialize(lib));
             CopyToBackup(path);
             Logger.Log($"[TemplateLibrary] Lưu bộ '{lib.Name}': {lib.Entries.Count} block mẫu -> '{path}'");
         }
@@ -249,14 +244,36 @@ namespace LHBBlockScheduler.Core
         public static bool IsFilterActive(TemplateLibrary lib) =>
             !SettingsManager.Current.ScanAllBlocks && lib != null && lib.Entries != null && lib.Entries.Count > 0;
 
-        /// <summary>Block mẫu khớp: cùng tên block; ưu tiên cùng chủng loại, sau đó mẫu không ghi chủng loại (mọi chủng loại).</summary>
+        /// <summary>
+        /// Block mẫu khớp: cùng tên block; ưu tiên cùng chủng loại, sau đó mẫu không ghi chủng loại (mọi chủng loại).
+        /// v9.4: block trong XREF tên "XREF|TÊN" -> không khớp tên đầy đủ thì thử lại với "TÊN".
+        /// </summary>
         public static TemplateEntry Match(TemplateLibrary lib, string blockName, string visibility)
         {
             if (lib?.Entries == null || string.IsNullOrEmpty(blockName)) return null;
+            var e = MatchName(lib, blockName, visibility);
+            if (e != null) return e;
+            string bare = StripXrefPrefix(blockName);
+            return bare.Length != blockName.Length ? MatchName(lib, bare, visibility) : null;
+        }
+
+        private static TemplateEntry MatchName(TemplateLibrary lib, string blockName, string visibility)
+        {
             var sameName = lib.Entries.Where(e => string.Equals(e.BlockName, blockName, StringComparison.OrdinalIgnoreCase)).ToList();
             return sameName.FirstOrDefault(e => !string.IsNullOrEmpty(e.VisibilityState) &&
                                                 string.Equals(e.VisibilityState, visibility ?? "", StringComparison.OrdinalIgnoreCase))
                    ?? sameName.FirstOrDefault(e => string.IsNullOrEmpty(e.VisibilityState));
+        }
+
+        /// <summary>
+        /// Tên block trong XREF (chưa bind) có dạng "TÊN_XREF|TÊN_BLOCK" -> "TÊN_BLOCK". Ký tự '|' không được dùng trong tên
+        /// block thường nên chỉ gặp ở block phụ thuộc XREF.
+        /// </summary>
+        public static string StripXrefPrefix(string blockName)
+        {
+            if (string.IsNullOrEmpty(blockName)) return blockName ?? "";
+            int i = blockName.LastIndexOf('|');
+            return i >= 0 && i < blockName.Length - 1 ? blockName.Substring(i + 1) : blockName;
         }
 
         /// <summary>
@@ -469,26 +486,28 @@ namespace LHBBlockScheduler.Core
     }
 
     /// <summary>
-    /// Lọc lúc quét chọn (Editor.SelectionAdded): chỉ giữ block mẫu, hoặc block cha có block mẫu bên trong (trong độ sâu
-    /// quét) để block mẫu lồng vẫn được đếm. Đối tượng khác bị bỏ khỏi vùng chọn ngay, không sáng lên.
+    /// Lọc lúc quét chọn (Editor.SelectionAdded): chỉ giữ block mẫu, hoặc block cha / ARRAY / MINSERT có block mẫu bên
+    /// trong (mọi tầng - khớp cách quét ở chế độ block mẫu) để block mẫu lồng vẫn được đếm. Đối tượng khác bị bỏ khỏi
+    /// vùng chọn ngay, không sáng lên. v9.4: bỏ block con đang ẩn theo visibility, bỏ bảng, XREF chỉ xét khi bật
+    /// "Đếm trong XREF", khớp tên block trong XREF bỏ tiền tố "XREF|".
     /// </summary>
     public sealed class TemplateSelectionFilter
     {
         private readonly Database _db;
         private readonly TemplateLibrary _lib;
-        private readonly int _maxDepth;
+        private readonly bool _countXrefs;
         private readonly HashSet<string> _names;
-        private readonly Dictionary<(ObjectId, int), bool> _containsCache = new Dictionary<(ObjectId, int), bool>();
+        private readonly Dictionary<ObjectId, bool> _containsCache = new Dictionary<ObjectId, bool>();
 
         public int Kept { get; private set; }
         public int KeptAsParent { get; private set; }
         public int Removed { get; private set; }
 
-        public TemplateSelectionFilter(Database db, TemplateLibrary lib, int maxDepth)
+        public TemplateSelectionFilter(Database db, TemplateLibrary lib, bool countXrefs)
         {
             _db = db;
             _lib = lib;
-            _maxDepth = maxDepth;
+            _countXrefs = countXrefs;
             _names = new HashSet<string>(lib.Entries.Select(e => e.BlockName), StringComparer.OrdinalIgnoreCase);
         }
 
@@ -506,10 +525,7 @@ namespace LHBBlockScheduler.Core
                         if (id.IsNull || !id.IsValid || id.IsErased) continue;
                         bool keep = false, parent = false;
                         if (id.ObjectClass.IsDerivedFrom(BlockExtractor.BlockRefClass) && tr.GetObject(id, OpenMode.ForRead) is BlockReference br)
-                        {
-                            keep = IsTemplate(tr, br);
-                            if (!keep && _maxDepth > 1) keep = parent = ContainsTemplate(tr, br.BlockTableRecord, 1);
-                        }
+                            keep = Keep(tr, br, out parent);
                         if (!keep)
                         {
                             e.Remove(i);
@@ -531,18 +547,30 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        private bool IsTemplate(Transaction tr, BlockReference br)
+        /// <summary>Giữ block này: là block mẫu, hoặc bên trong (mọi tầng) có block mẫu. parent = giữ vì chứa block mẫu.</summary>
+        private bool Keep(Transaction tr, BlockReference br, out bool parent)
         {
-            var def = (BlockTableRecord)tr.GetObject(br.DynamicBlockTableRecord, OpenMode.ForRead);
-            if (!_names.Contains(def.Name)) return false;
-            return TemplateLibraryManager.Match(_lib, def.Name, BlockExtractor.ReadVisibility(br, def.Name)) != null;
+            parent = false;
+            if (!br.Visible) return false;
+            var kind = BlockExtractor.Classify(tr, br, out var def);
+            if (kind == BlockExtractor.RefKind.Table) return false;
+            if (kind == BlockExtractor.RefKind.Xref && !_countXrefs) return false;
+            if (kind == BlockExtractor.RefKind.Block && IsTemplate(br, def.Name)) return true;
+            parent = ContainsTemplate(tr, br.BlockTableRecord);
+            return parent;
         }
 
-        private bool ContainsTemplate(Transaction tr, ObjectId btrId, int childDepth)
+        private bool IsTemplate(BlockReference br, string name)
         {
-            var key = (btrId, childDepth);
-            if (_containsCache.TryGetValue(key, out bool cached)) return cached;
-            _containsCache[key] = false;
+            if (!_names.Contains(name) && !_names.Contains(TemplateLibraryManager.StripXrefPrefix(name))) return false;
+            return TemplateLibraryManager.Match(_lib, name, BlockExtractor.ReadVisibility(br, name)) != null;
+        }
+
+        /// <summary>Định nghĩa block (BTR của instance) có block mẫu ở bất kỳ tầng nào - nhớ theo BTR.</summary>
+        private bool ContainsTemplate(Transaction tr, ObjectId btrId)
+        {
+            if (_containsCache.TryGetValue(btrId, out bool cached)) return cached;
+            _containsCache[btrId] = false; // chống vòng lặp (bản vẽ lỗi có block tự chứa chính nó)
 
             bool found = false;
             if (tr.GetObject(btrId, OpenMode.ForRead) is BlockTableRecord btr && !btr.IsLayout)
@@ -552,15 +580,14 @@ namespace LHBBlockScheduler.Core
                     // Lọc theo loại trước khi mở: định nghĩa block cha có nhiều nét, ít block con
                     if (!id.ObjectClass.IsDerivedFrom(BlockExtractor.BlockRefClass)) continue;
                     if (!(tr.GetObject(id, OpenMode.ForRead) is BlockReference child)) continue;
-                    if (IsTemplate(tr, child) ||
-                        (childDepth + 1 < _maxDepth && ContainsTemplate(tr, child.BlockTableRecord, childDepth + 1)))
+                    if (Keep(tr, child, out _))
                     {
                         found = true;
                         break;
                     }
                 }
             }
-            _containsCache[key] = found;
+            _containsCache[btrId] = found;
             return found;
         }
     }

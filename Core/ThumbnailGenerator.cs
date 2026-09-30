@@ -54,8 +54,12 @@ namespace LHBBlockScheduler.Core
 
         /// <summary>
         /// Lấy hoặc tạo thumbnail theo BlockTableRecord ObjectId (hỗ trợ cả dynamic block anonymous record).
+        /// v9.4: tên file = &lt;tên block[_chủng loại]&gt;__&lt;chữ ký nội dung định nghĩa block&gt;.png. Trước đây chỉ theo tên block:
+        /// 2 bản vẽ có block cùng tên khác hình ("DEN", "SPRINKLER"...) dùng chung 1 ảnh -> form, Excel, gợi ý gộp sai hình;
+        /// sửa block bằng BEDIT không đổi ảnh. signatureMemo: nhớ chữ ký theo BTR trong 1 lần quét (nhiều dòng cùng BTR).
         /// </summary>
-        public static string GetOrCreateThumbnail(Document sourceDoc, ObjectId btrId, string cacheKey)
+        public static string GetOrCreateThumbnail(Document sourceDoc, ObjectId btrId, string cacheKey,
+                                                  Dictionary<ObjectId, string> signatureMemo = null)
         {
             if (btrId.IsNull || sourceDoc == null) return null;
 
@@ -63,9 +67,18 @@ namespace LHBBlockScheduler.Core
             {
                 Directory.CreateDirectory(ThumbCacheFolder);
                 _folderReady = true;
+                CleanupOldThumbnails();
+            }
+
+            string sig = null;
+            if (signatureMemo == null || !signatureMemo.TryGetValue(btrId, out sig))
+            {
+                sig = ComputeBtrSignature(sourceDoc.Database, btrId);
+                if (signatureMemo != null) signatureMemo[btrId] = sig;
             }
             string safeFileName = MakeSafeFileName(cacheKey);
-            string pngPath = Path.Combine(ThumbCacheFolder, safeFileName + ".png");
+            if (safeFileName.Length > 120) safeFileName = safeFileName.Substring(0, 120);
+            string pngPath = Path.Combine(ThumbCacheFolder, safeFileName + "__" + sig + ".png");
 
             if (File.Exists(pngPath))
             {
@@ -73,7 +86,89 @@ namespace LHBBlockScheduler.Core
             }
 
             _hashCache.Remove(pngPath);
+            Logger.Log($"ThumbnailGenerator: '{cacheKey}' chữ ký nội dung {sig} chưa có ảnh -> render");
             return GenerateThumbnail(sourceDoc, btrId, cacheKey, pngPath);
+        }
+
+        /// <summary>
+        /// Chữ ký nội dung định nghĩa block (v9.4): loại, layer, màu, ẩn/hiện, khung bao, chữ của từng entity (tối đa 400
+        /// entity đầu + tổng số entity) -> SHA-256 cắt 12 ký tự hex. Không dùng tên BTR (block ẩn danh *U đổi tên sau mỗi
+        /// lần mở bản vẽ) -> cùng hình thì dùng lại ảnh, khác hình thì ảnh khác.
+        /// </summary>
+        public static string ComputeBtrSignature(Database db, ObjectId btrId)
+        {
+            var sb = new System.Text.StringBuilder(4096);
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            int total = 0;
+            try
+            {
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    if (tr.GetObject(btrId, OpenMode.ForRead) is BlockTableRecord btr)
+                    {
+                        foreach (ObjectId id in btr)
+                        {
+                            total++;
+                            if (total > 400) continue;
+                            if (!(tr.GetObject(id, OpenMode.ForRead) is Entity ent)) continue;
+                            sb.Append(id.ObjectClass.DxfName).Append(ent.Visible ? '+' : '-').Append(ent.ColorIndex).Append(':').Append(ent.Layer);
+                            try
+                            {
+                                // Bounds không ném eInvalidExtents như GeometricExtents (ĐÈN EXIT) - trả null khi không tính được
+                                var b = ent.Bounds;
+                                if (b.HasValue)
+                                    sb.Append('[').Append(b.Value.MinPoint.X.ToString("G6", inv)).Append(',').Append(b.Value.MinPoint.Y.ToString("G6", inv))
+                                      .Append(',').Append(b.Value.MaxPoint.X.ToString("G6", inv)).Append(',').Append(b.Value.MaxPoint.Y.ToString("G6", inv)).Append(']');
+                            }
+                            catch { sb.Append("[?]"); }
+                            if (ent is DBText t) sb.Append(t.TextString);
+                            else if (ent is MText m) sb.Append(m.Contents);
+                            else if (ent is BlockReference nested)
+                            {
+                                try { sb.Append('<').Append(((BlockTableRecord)tr.GetObject(nested.DynamicBlockTableRecord, OpenMode.ForRead)).Name).Append('>'); }
+                                catch { }
+                            }
+                            sb.Append(';');
+                        }
+                    }
+                    tr.Commit();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Không tính được chữ ký -> dùng handle BTR (vẫn khác nhau giữa các block trong 1 bản vẽ)
+                Logger.Warn($"ThumbnailGenerator: không tính được chữ ký nội dung BTR {btrId}: {ex.Message}");
+                sb.Append("H").Append(btrId.Handle.ToString());
+            }
+            sb.Append('#').Append(total);
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] h = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+                return BitConverter.ToString(h, 0, 6).Replace("-", "");
+            }
+        }
+
+        /// <summary>Xoá ảnh trong cache không dùng tới lâu (&gt; 90 ngày) - v9.4 đổi tên file nên ảnh cũ không còn ai dùng.</summary>
+        private static void CleanupOldThumbnails()
+        {
+            try
+            {
+                var limit = DateTime.Now.AddDays(-90);
+                int deleted = 0;
+                foreach (var f in Directory.GetFiles(ThumbCacheFolder, "*.png"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTime(f) < limit) { File.Delete(f); deleted++; }
+                    }
+                    catch { }
+                }
+                if (deleted > 0) Logger.Log($"ThumbnailGenerator: dọn {deleted} ảnh cache cũ hơn 90 ngày trong '{ThumbCacheFolder}'");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"ThumbnailGenerator: dọn cache ảnh lỗi: {ex.Message}");
+            }
         }
 
         private static string GenerateThumbnail(Document doc, ObjectId btrId, string blockName, string pngPath)

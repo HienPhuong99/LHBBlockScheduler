@@ -153,10 +153,17 @@ namespace LHBBlockScheduler.Core
             }
         }
 
-        /// <summary>Mở file sau khi xuất (Excel / chương trình mặc định).</summary>
+        /// <summary>
+        /// Mở file sau khi xuất (Excel / chương trình mặc định). v9.4: UseShellExecute = true tường minh - trên .NET 8/10
+        /// (AutoCAD 2025+) mặc định là false, Process.Start(path) báo lỗi thay vì mở Excel.
+        /// </summary>
         public static void Open(string path)
         {
-            try { System.Diagnostics.Process.Start(path); }
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+                Logger.Log($"[ExcelExporter] Mở '{path}' bằng chương trình mặc định");
+            }
             catch (Exception ex) { Logger.Warn($"[ExcelExporter] Không mở được '{path}': {ex.Message}"); }
         }
     }

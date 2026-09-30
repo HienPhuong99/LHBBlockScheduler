@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BUNDLE CHO MÁY BUILD (dev), KHÔNG PHẢI BẢN PHÁT HÀNH: nạp LHBLoader.dll, loader chỉ tìm DLL trong
+  %APPDATA%\LHBBlockScheduler\Runtime (thư mục do lúc build chép vào). Máy người dùng: kéo thả LHB.lsp
+  (xem HUONG_DAN_SU_DUNG.md). DLL build net48 chỉ chạy AutoCAD 2021-2024 (R24.0-R24.3); AutoCAD 2025+
+  chạy .NET 8/10 -> SeriesMax = R24.3 (v9.4, trước đây ghi nhầm R25.1).
+-->
 <ApplicationPackage
     SchemaVersion="1.0"
     AppVersion="1.0.0"
@@ -8,9 +14,9 @@
     AppNameSpace="LHBBlockScheduler"
     Author="">
   <CompanyDetails Name="" Url="" Email="" />
-  <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R25.1" />
+  <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R24.3" />
   <Components Description="LHB Block Scheduler Components">
-    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R25.1" />
+    <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.0" SeriesMax="R24.3" />
     <ComponentEntry
         AppName="LHBLoader"
         Version="1.0"

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -67,11 +66,14 @@ namespace LHBBlockScheduler.Core
 
             Logger.Log($"TableExporter.ExportTable: xuất {sortedItems.Count} dòng, {exportCols.Count} cột, scale={config.TableScale} tại {insertionPoint}");
 
+            BeginImageExport();
             using (doc.LockDocument())
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
-                var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                // v9.4: vẽ vào không gian đang làm việc (Model hoặc Layout) - trước đây luôn vào Model Space
+                var ms = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForWrite);
+                bool inModel = db.CurrentSpaceId == SymbolUtilityServices.GetBlockModelSpaceId(db);
+                Logger.Log($"TableExporter.ExportTable: không gian '{SpaceName(tr, ms)}'{(inModel ? "" : " (Layout)")}");
 
                 // Tạo hoặc lấy TextStyle LHB_TABLE font Arial hỗ trợ tiếng Việt
                 ObjectId textStyleId = GetOrCreateTextStyle(db, tr, tpl.TextStyleName, tpl.EffectiveFont);
@@ -121,13 +123,21 @@ namespace LHBBlockScheduler.Core
                         // Dòng chạy xuống dưới: tâm ô = đỉnh dòng - nửa chiều cao dòng
                         var cellCenter = insertionPoint + new Vector3d(cellLeft + cellWidth / 2.0, -rowIndex * rowHeight - rowHeight / 2.0, 0);
 
-                        // Nếu user có gán ảnh tuỳ chỉnh CustomImagePath -> chèn RasterImage
-                        if (!string.IsNullOrEmpty(item.CustomImagePath) && File.Exists(item.CustomImagePath))
+                        // Nếu user có gán ảnh tuỳ chỉnh CustomImagePath -> chèn RasterImage.
+                        // v9.4: block của XREF -> chèn ảnh ký hiệu (không chèn tham chiếu tới định nghĩa phụ thuộc XREF)
+                        string imagePath = !string.IsNullOrEmpty(item.CustomImagePath) && File.Exists(item.CustomImagePath)
+                            ? item.CustomImagePath
+                            : IsXrefBlock(tr, item) && !string.IsNullOrEmpty(item.ThumbnailPath) && File.Exists(item.ThumbnailPath) ? item.ThumbnailPath : null;
+                        if (imagePath != null)
                         {
                             // Góc DƯỚI-trái của dòng (ảnh vẽ từ đây lên trên)
                             var rowOrigin = insertionPoint + new Vector3d(0, -(rowIndex + 1) * rowHeight, 0);
-                            var imgId = InsertCustomRasterImage(ms, tr, db, item.CustomImagePath, rowOrigin, cellLeft, cellWidth, rowHeight);
+                            var imgId = InsertCustomRasterImage(ms, tr, db, imagePath, rowOrigin, cellLeft, cellWidth, rowHeight);
                             if (imgId != ObjectId.Null) createdIds.Add(imgId);
+                        }
+                        else if (IsXrefBlock(tr, item))
+                        {
+                            Logger.Warn($"TableExporter: '{item.BlockName}' là block của XREF, chưa có ảnh ký hiệu -> để trống ô");
                         }
                         else
                         {
@@ -155,8 +165,10 @@ namespace LHBBlockScheduler.Core
                     createdIds.AddRange(DrawRow(ms, tr, insertionPoint, sortedItems.Count + 1, rowHeight, colWidths, textHeight, textStyleId, totals));
                 }
 
-                // Đường dẫn từ mép phải từng dòng thiết bị tới chỗ block trùng (dòng dữ liệu r nằm ở hàng r+1, sau header)
-                try
+                // Đường dẫn từ mép phải từng dòng thiết bị tới chỗ block trùng (dòng dữ liệu r nằm ở hàng r+1, sau header).
+                // Bảng trên Layout: không vẽ (block trùng nằm ở Model, toạ độ khác).
+                if (!inModel) Logger.Log("TableExporter: bảng trên Layout -> không vẽ đường dẫn tới block trùng");
+                else try
                 {
                     var anchors = sortedItems
                         .Select((item, r) => (item, insertionPoint + new Vector3d(totalWidth, -(r + 1) * rowHeight - rowHeight / 2.0, 0)))
@@ -171,6 +183,7 @@ namespace LHBBlockScheduler.Core
                 tr.Commit();
                 Logger.Log($"TableExporter.ExportTable: đã hoàn tất vẽ, tạo {createdIds.Count}/{expectedEntities} entity dự kiến.");
             }
+            EndImageExport(doc);
 
             // Gom Group
             if (createdIds.Count > 0)
@@ -437,14 +450,10 @@ namespace LHBBlockScheduler.Core
                 // 1. BlockReference tạm ở scale 1 để đo extents thật
                 using (var brTmp = new BlockReference(Point3d.Origin, btrId))
                 {
-                    Extents3d ext;
-                    try
+                    // ExtentsHelper thay GeometricExtents (ĐÈN EXIT ném eInvalidExtents -> trước đây ô ký hiệu để trống)
+                    if (!ExtentsHelper.TryGetOwnExtents(brTmp, out Extents3d ext))
                     {
-                        ext = brTmp.GeometricExtents;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"InsertBlockReferenceSymbol: Không tính được extents cho '{item.BlockName}': {ex.Message}");
+                        Logger.Warn($"InsertBlockReferenceSymbol: Không tính được extents cho '{item.BlockName}'");
                         return ObjectId.Null;
                     }
 
@@ -488,28 +497,9 @@ namespace LHBBlockScheduler.Core
         {
             try
             {
-                string targetImagePath = imagePath;
-
-                // Copy PNG sang <thư mục chứa DWG>\<tên DWG>_LHBImages\ để đường dẫn nằm cạnh bản vẽ
-                if (!string.IsNullOrEmpty(db.Filename) && File.Exists(db.Filename))
-                {
-                    string dwgDir = Path.GetDirectoryName(db.Filename);
-                    string dwgName = Path.GetFileNameWithoutExtension(db.Filename);
-                    string localImgDir = Path.Combine(dwgDir, dwgName + "_LHBImages");
-                    if (!Directory.Exists(localImgDir)) Directory.CreateDirectory(localImgDir);
-
-                    string destFile = Path.Combine(localImgDir, Path.GetFileName(imagePath));
-                    if (!File.Exists(destFile))
-                    {
-                        File.Copy(imagePath, destFile, true);
-                    }
-                    targetImagePath = destFile;
-                }
-                else
-                {
-                    MessageBox.Show("Bản vẽ hiện tại chưa được lưu ra file (chưa có đường dẫn DWG).\nẢnh tuỳ chỉnh sẽ tạm thời trỏ vào thư mục %APPDATA%. Hãy lưu bản vẽ trước khi chia sẻ file!",
-                        "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                // Chép PNG sang <thư mục chứa DWG>\<tên DWG>_LHBImages\ (v9.4: dùng chung với bảng AutoCAD Table,
+                // trỏ đường dẫn tương đối; bản vẽ chưa lưu thì báo 1 lần sau khi xuất thay vì hộp thoại mỗi ảnh)
+                string localPath = LocalizeImage(db, imagePath, out string relativePath);
 
                 var imgDictId = RasterImageDef.GetImageDictionary(db);
                 if (imgDictId == ObjectId.Null)
@@ -518,8 +508,8 @@ namespace LHBBlockScheduler.Core
                 var imgDict = (DBDictionary)tr.GetObject(imgDictId, OpenMode.ForWrite);
                 string key = "LHB_IMG_" + Guid.NewGuid().ToString("N").Substring(0, 8);
 
-                var imgDef = new RasterImageDef { SourceFileName = targetImagePath };
-                imgDef.Load();
+                var imgDef = new RasterImageDef();
+                SetImageSource(imgDef, localPath, relativePath, key);
                 ObjectId imgDefId = imgDict.SetAt(key, imgDef);
                 tr.AddNewlyCreatedDBObject(imgDef, true);
 
@@ -545,6 +535,168 @@ namespace LHBBlockScheduler.Core
                 Logger.Error(ex, $"InsertCustomRasterImage('{imagePath}')");
                 return ObjectId.Null;
             }
+        }
+
+        // ============================== ẢNH ĐI THEO BẢN VẼ (v9.4) ==============================
+
+        [ThreadStatic] private static int _imagesUnsaved;
+
+        /// <summary>Bắt đầu 1 lần xuất bảng: đếm ảnh phải trỏ tạm %APPDATA% vì bản vẽ chưa lưu.</summary>
+        internal static void BeginImageExport() => _imagesUnsaved = 0;
+
+        /// <summary>Kết thúc lần xuất: bản vẽ chưa lưu mà có ảnh -> nhắc 1 lần trên dòng lệnh.</summary>
+        internal static void EndImageExport(Document doc)
+        {
+            if (_imagesUnsaved == 0) return;
+            string msg = $"{_imagesUnsaved} ảnh trong bảng đang trỏ vào thư mục %APPDATA% của máy này vì bản vẽ CHƯA LƯU. " +
+                         "Lưu bản vẽ (SAVE) rồi xuất lại bảng để ảnh được chép vào thư mục <tên bản vẽ>_LHBImages cạnh file DWG.";
+            Logger.Warn("[TableExporter] " + msg);
+            doc?.Editor.WriteMessage("\n[LHB] Lưu ý: " + msg + "\n");
+            _imagesUnsaved = 0;
+        }
+
+        /// <summary>Đường dẫn DWG đã lưu của database; null nếu bản vẽ mới chưa lưu (Filename lúc đó là file mẫu .dwt).</summary>
+        internal static string SavedDrawingPath(Database db)
+        {
+            try
+            {
+                var doc = Application.DocumentManager.GetDocument(db);
+                if (doc != null && !doc.IsNamedDrawing) return null;
+                string f = db.Filename;
+                if (string.IsNullOrEmpty(f) || !File.Exists(f) || !f.EndsWith(".dwg", StringComparison.OrdinalIgnoreCase)) return null;
+                return f;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Chép ảnh vào &lt;thư mục DWG&gt;\&lt;tên DWG&gt;_LHBImages\ (đã có cùng cỡ thì dùng lại). Trả đường dẫn tuyệt đối bản chép;
+        /// relativePath = ".\&lt;tên DWG&gt;_LHBImages\&lt;file&gt;" (AutoCAD tìm ảnh theo vị trí DWG khi mang sang máy khác).
+        /// Bản vẽ chưa lưu / không ghi được thư mục DWG: trả đường dẫn gốc, relativePath = null.
+        /// </summary>
+        internal static string LocalizeImage(Database db, string imagePath, out string relativePath)
+        {
+            relativePath = null;
+            string dwg = SavedDrawingPath(db);
+            if (dwg == null)
+            {
+                _imagesUnsaved++;
+                return imagePath;
+            }
+            try
+            {
+                string folderName = Path.GetFileNameWithoutExtension(dwg) + "_LHBImages";
+                string localDir = Path.Combine(Path.GetDirectoryName(dwg), folderName);
+                string fileName = Path.GetFileName(imagePath);
+                string dest = Path.Combine(localDir, fileName);
+                // Ảnh đã nằm sẵn trong thư mục ảnh của bản vẽ
+                if (string.Equals(Path.GetFullPath(imagePath), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+                {
+                    relativePath = ".\\" + folderName + "\\" + fileName;
+                    return dest;
+                }
+                Directory.CreateDirectory(localDir);
+                if (!File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(imagePath).Length)
+                    File.Copy(imagePath, dest, true);
+                relativePath = ".\\" + folderName + "\\" + fileName;
+                Logger.Log($"[TableExporter] Ảnh '{imagePath}' -> '{dest}' (trỏ '{relativePath}')");
+                return dest;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[TableExporter] Không chép được ảnh '{imagePath}' cạnh bản vẽ '{dwg}': {ex.Message} -> trỏ đường dẫn gốc");
+                return imagePath;
+            }
+        }
+
+        /// <summary>
+        /// Gán file ảnh cho RasterImageDef. Có đường dẫn tương đối: lưu trong DWG đường dẫn tương đối (SourceFileName, AutoCAD
+        /// tìm theo vị trí DWG khi mở ở máy khác), nạp ngay từ file thật (ActiveFileName) - giống ảnh chèn bằng IMAGEATTACH
+        /// kiểu "Relative path". Lỗi thì dùng đường dẫn tuyệt đối (luôn chạy trên máy này).
+        /// </summary>
+        internal static void SetImageSource(RasterImageDef def, string absolutePath, string relativePath, string label)
+        {
+            if (relativePath != null)
+            {
+                try
+                {
+                    def.SourceFileName = relativePath;
+                    def.ActiveFileName = absolutePath;
+                    def.Load();
+                    if (def.IsLoaded)
+                    {
+                        Logger.Log($"[TableExporter] Ảnh '{label}': lưu đường dẫn tương đối '{relativePath}', nạp từ '{def.ActiveFileName}' OK");
+                        return;
+                    }
+                    Logger.Warn($"[TableExporter] Ảnh '{label}': đường dẫn tương đối '{relativePath}' không nạp được -> dùng đường dẫn tuyệt đối");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[TableExporter] Ảnh '{label}': đường dẫn tương đối '{relativePath}' lỗi {ex.Message} -> dùng đường dẫn tuyệt đối");
+                }
+            }
+            def.SourceFileName = absolutePath;
+            def.ActiveFileName = absolutePath;
+            def.Load();
+            Logger.Log($"[TableExporter] Ảnh '{label}': đường dẫn tuyệt đối '{absolutePath}', nạp={def.IsLoaded}");
+        }
+
+        /// <summary>
+        /// Block ảnh LHB_IMG_ đã có từ lần xuất trước (bản trước v9.4 trỏ %APPDATA%): ảnh nằm ngoài thư mục DWG thì chép
+        /// cạnh DWG và trỏ lại. Lỗi không làm hỏng việc xuất bảng.
+        /// </summary>
+        internal static void RelinkImagesToDrawing(Database db, Transaction tr, BlockTableRecord btr, string label)
+        {
+            try
+            {
+                string dwg = SavedDrawingPath(db);
+                if (dwg == null) return;
+                foreach (ObjectId id in btr)
+                {
+                    if (!(tr.GetObject(id, OpenMode.ForRead) is RasterImage img) || img.ImageDefId.IsNull) continue;
+                    var def = (RasterImageDef)tr.GetObject(img.ImageDefId, OpenMode.ForRead);
+                    string src = def.SourceFileName ?? "";
+                    if (src.StartsWith(".")) continue; // đã trỏ tương đối theo DWG
+                    string current = !string.IsNullOrEmpty(def.ActiveFileName) && File.Exists(def.ActiveFileName) ? def.ActiveFileName : src;
+                    if (!File.Exists(current)) continue;
+                    string local = LocalizeImage(db, current, out string rel);
+                    if (rel == null) continue;
+                    def.UpgradeOpen();
+                    SetImageSource(def, local, rel, label);
+                    Logger.Log($"[TableExporter] '{label}': ảnh cũ '{src}' -> trỏ lại '{rel}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[TableExporter] '{label}': trỏ lại ảnh cạnh bản vẽ lỗi {ex.Message}");
+            }
+        }
+
+        /// <summary>Block của XREF (định nghĩa phụ thuộc XREF) - không chèn tham chiếu trực tiếp vào bảng.</summary>
+        private static bool IsXrefBlock(Transaction tr, BlockItem item)
+        {
+            var id = !item.DynamicBtrId.IsNull && item.DynamicBtrId.IsValid ? item.DynamicBtrId : item.SourceBtrId;
+            if (id.IsNull || !id.IsValid) return false;
+            try
+            {
+                var btr = (BlockTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                return btr.IsDependent || btr.IsFromExternalReference;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Tên không gian để ghi log: "Model" / tên Layout.</summary>
+        internal static string SpaceName(Transaction tr, BlockTableRecord space)
+        {
+            try
+            {
+                if (!space.LayoutId.IsNull && tr.GetObject(space.LayoutId, OpenMode.ForRead) is Layout lo) return lo.LayoutName;
+            }
+            catch { }
+            return space.Name;
         }
     }
 }

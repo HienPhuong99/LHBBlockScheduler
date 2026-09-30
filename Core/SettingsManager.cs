@@ -13,6 +13,11 @@ namespace LHBBlockScheduler.Core
         public bool CountParentBlocks { get; set; } = false;
         public bool SplitByVisibility { get; set; } = true;
         public bool SplitByLayer { get; set; } = false;
+        /// <summary>
+        /// v9.4: true = đếm cả block nằm trong XREF. Mặc định false = bỏ qua XREF (settings.json cũ thiếu field -> false,
+        /// đúng mặc định vì DataContractJsonSerializer không chạy property initializer).
+        /// </summary>
+        public bool CountXrefBlocks { get; set; }
         /// <summary>true = đã chuyển thư viện thiết bị cũ (Libraries\*.json) sang bộ block mẫu "TV cu ..." (v9.1).</summary>
         public bool DeviceLibrariesMigrated { get; set; }
         /// <summary>Kiểu bảng xuất: "AutoCAD Table" (mặc định) hoặc "Line + Text (cũ)".</summary>
@@ -94,10 +99,10 @@ namespace LHBBlockScheduler.Core
             try
             {
                 string path = SettingsFilePath;
-                if (File.Exists(path))
+                if (File.Exists(path) || File.Exists(FileHelper.BackupPath(path)))
                 {
-                    string json = File.ReadAllText(path);
-                    var settings = JsonHelper.Deserialize<AppSettings>(json);
+                    // v9.4: file chính hỏng (CAD crash giữa lúc ghi ở bản cũ) -> đọc bản dự phòng settings.json.bak
+                    var settings = FileHelper.ReadWithBackup(path, JsonHelper.Deserialize<AppSettings>, "settings.json");
                     if (settings != null)
                     {
                         // DataContractJsonSerializer không chạy property initializer -> bù giá trị mặc định
@@ -119,7 +124,9 @@ namespace LHBBlockScheduler.Core
                         settings.TableTemplates ??= new List<TableTemplate>();
                         if (settings.MmPerDrawingUnit < 0) settings.MmPerDrawingUnit = 0;
                         if (settings.LengthWastePercent < 0) settings.LengthWastePercent = 0;
-                        Logger.Log($"SettingsManager: đã đọc settings.json (Units={settings.Units.Count}, bộ mẫu='{settings.CurrentTemplateSet}', ScanDepth={settings.ScanDepth})");
+                        Logger.Log($"SettingsManager: đã đọc settings.json (Units={settings.Units.Count}, bộ mẫu='{settings.CurrentTemplateSet}', " +
+                                   $"ScanDepth={settings.ScanDepth}, CountParents={settings.CountParentBlocks}, SplitVis={settings.SplitByVisibility}, " +
+                                   $"SplitLay={settings.SplitByLayer}, Xref={settings.CountXrefBlocks})");
                         return settings;
                     }
                 }
@@ -140,7 +147,8 @@ namespace LHBBlockScheduler.Core
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
                 string json = JsonHelper.Serialize(Current);
-                File.WriteAllText(path, json, System.Text.Encoding.UTF8);
+                // v9.4: ghi file tạm rồi thay (giữ settings.json.bak) - không còn ghi thẳng đè file đang dùng
+                FileHelper.WriteAllTextAtomic(path, json);
                 Logger.Log($"SettingsManager: đã lưu cấu hình vào '{path}' ({json.Length} ký tự)");
             }
             catch (Exception ex)

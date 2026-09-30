@@ -21,7 +21,7 @@ Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím t�
 | # | Tính năng | Lệnh | Làm gì |
 |---|---|---|---|
 | 1 | Thống kê theo tầng / khu vực | `LHBKHUVUC` | Chọn các đường bao kín (polyline / circle) quanh từng tầng / khu. Tên lấy tự động từ chữ to nhất trong đường bao. Bảng thống kê có thêm 1 cột SL cho mỗi khu + cột "Ngoài khu vực". Lưu trong bản vẽ |
-| 2 | Bảng tự cập nhật | `LHBCAPNHAT` | Bảng AutoCAD Table xuất từ v9 nhớ vùng quét. Sửa bản vẽ xong gõ `LHBCAPNHAT`, Enter: SL / khu vực / thuộc tính tính lại, ô thay đổi tô **đỏ**, loại block mới thêm dòng cuối. Tên, đơn vị sửa tay trong bảng giữ nguyên |
+| 2 | Bảng tự cập nhật | `LHBCAPNHAT` | Bảng AutoCAD Table xuất từ v9 nhớ vùng quét. Sửa bản vẽ xong gõ `LHBCAPNHAT`, Enter: SL / khu vực / thuộc tính tính lại, ô thay đổi tô **đỏ**, loại block mới thêm dòng cuối. Tên, đơn vị sửa tay trong bảng giữ nguyên. Từ v9.4: tìm bảng cả trên Layout; chỉ thêm block mới đặt sau lúc xuất (bảng xuất từ v9.4); bảng bị thêm / xoá dòng, cột bằng tay thì báo và không cập nhật |
 | 3 | Nhiều bản vẽ | `LHBNHIEUBV` | Chọn nhiều file DWG (không cần mở). Mỗi bản vẽ 1 cột SL + cột Tổng. Xuất bảng CAD (có ký hiệu) và Excel |
 | 4 | Chiều dài ống / dây | `LHBCHIEUDAI` | Line, polyline, arc, spline, mline theo layer. Đổi ra mét, % hao hụt, tách theo khu vực, đặt tên thống kê theo layer (nhớ lần sau). Xuất bảng CAD / Excel |
 | 5 | Cột thuộc tính | Premium ▾ > Cột thuộc tính | Hiện giá trị thuộc tính (attribute) và tham số dynamic block thành cột. Tách dòng theo giá trị (vd theo K-factor, công suất) |

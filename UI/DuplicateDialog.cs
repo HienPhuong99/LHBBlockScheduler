@@ -29,6 +29,8 @@ namespace LHBBlockScheduler.UI
             _owner = owner;
             BuildUi();
             RefreshList();
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+            DocumentBinding.Bind(this, doc);
         }
 
         private void BuildUi()
@@ -126,7 +128,7 @@ namespace LHBBlockScheduler.UI
             {
                 var items = g.Items.ToList();
                 int nested = g.Instances.Count(i => !i.IsTopLevel);
-                string note = nested > 0 ? $"{nested} block nằm trong block cha (xoá tay)" : "";
+                string note = nested > 0 ? $"{nested} block nằm trong block cha / ARRAY / MINSERT (xoá tay)" : "";
                 string names = string.Join(" / ", items.Select(i => i.DisplayName ?? i.BlockName).Distinct());
                 string vis = string.Join(" / ", items.Select(i => i.VisibilityState ?? "").Where(v => v.Length > 0).Distinct());
                 string kind = g.HasOverlap ? $"Che lấp {g.MaxOverlap:P0}" : "Cùng điểm chèn";
@@ -216,7 +218,7 @@ namespace LHBBlockScheduler.UI
                 $"Xoá {extra} block thừa, mỗi vị trí giữ lại 1 block?\n\n" +
                 "Block giữ lại là block vẽ trước (cũ nhất). Chỗ 'Che lấp' 2 block có thể khác cỡ / chủng loại:\n" +
                 "nên Zoom tới xem trước, xoá sai thì Ctrl+Z.\n" +
-                "Block nằm trong block cha sẽ không bị xoá (cần xoá tay).\n" +
+                "Block nằm trong block cha / ARRAY / phần tử MINSERT sẽ không bị xoá (cần xoá tay).\n" +
                 "Hoàn tác được bằng Ctrl+Z (lệnh U) trong AutoCAD.",
                 "Xoá bản thừa", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (answer != DialogResult.Yes) return;
@@ -229,7 +231,7 @@ namespace LHBBlockScheduler.UI
                 RedrawCirclesIfAny();
 
                 MessageBox.Show(this,
-                    $"Đã xoá {deleted.Count} block thừa." + (skipped > 0 ? $"\nCòn {skipped} block nằm trong block cha, cần xoá tay." : ""),
+                    $"Đã xoá {deleted.Count} block thừa." + (skipped > 0 ? $"\nCòn {skipped} block nằm trong block cha / ARRAY / MINSERT, cần xoá tay." : ""),
                     "Xoá bản thừa", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)

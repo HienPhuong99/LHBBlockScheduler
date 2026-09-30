@@ -30,6 +30,8 @@ namespace LHBBlockScheduler.UI
         public LengthDialog(Document doc)
         {
             _doc = doc;
+            // v9.4: ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+            DocumentBinding.Bind(this, doc);
             UiKit.InitForm(this, "Chiều dài ống / dây - LHB Premium", 980, 540);
             _grid = UiKit.Grid();
             _grid.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
@@ -170,10 +172,13 @@ namespace LHBBlockScheduler.UI
         {
             if (_rows.Count == 0) return;
             var (headers, rows, sum) = BuildTable();
+            // v9.4: bảng vào không gian đang làm việc; ở Layout thì hỏi dùng tỉ lệ 1
+            double? scale = UiKit.ScaleForCurrentSpace(this, _doc, SettingsManager.Current.TableScale);
+            if (scale == null) return;
             if (!UiKit.PickPoint(this, _doc, "\nChọn điểm chèn bảng chiều dài: ", out var pt)) return;
             try
             {
-                var cfg = new TableExportConfig { TableScale = SettingsManager.Current.TableScale };
+                var cfg = new TableExportConfig { TableScale = scale.Value };
                 var text = rows.Select(r => r.Select(x => x is double d ? d.ToString("0.##", CultureInfo.InvariantCulture) : x?.ToString() ?? "").ToArray()).ToList();
                 TableExporterAcad.ExportGrid(_doc, "BẢNG THỐNG KÊ CHIỀU DÀI ỐNG / DÂY", headers, text, pt, cfg.ActualTextHeight, cfg.ActualRowHeight,
                                              sumCols: TableTemplate.Current.AddTotalRow ? sum : null,

@@ -36,7 +36,16 @@ namespace LHBBlockScheduler.UI
         private DataGridView _grid;
         private TextBox _txtSearch;
         private ComboBox _cboScanDepth;
-        private CheckBox _chkCountParents, _chkSplitVisibility, _chkSplitLayer, _chkExcludeDup;
+        private CheckBox _chkCountParents, _chkSplitVisibility, _chkSplitLayer, _chkExcludeDup, _chkXref;
+        private ToolStripStatusLabel _lblStatus;
+
+        // v9.4: vùng chọn của RIÊNG form này (trước đây BlockExtractor.LastSelectedObjectIds static dùng chung mọi bản
+        // vẽ: form bản vẽ A đang mở, LHBSCAN ở bản vẽ B -> đổi tuỳ chọn trên form A quét ObjectId của B)
+        private readonly List<ObjectId> _selectedIds;
+        private readonly HashSet<ObjectId> _selectedSet;
+        private ScanStats _scanStats;
+        // v9.4: form theo bản vẽ - ẩn khi đổi bản vẽ, tự đóng khi bản vẽ đóng
+        private readonly DocumentBinding _binding;
         private DuplicateDialog _dupDialog;
         private ComboBox _cboTemplateSet;
         private CheckBox _chkOnlyTemplate;
@@ -64,9 +73,12 @@ namespace LHBBlockScheduler.UI
         private readonly Dictionary<string, Image> _thumbCache = new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
         private readonly List<Image> _retiredThumbs = new List<Image>();
 
-        public BlockScheduleForm(List<BlockItem> items, Document doc)
+        public BlockScheduleForm(List<BlockItem> items, Document doc, List<ObjectId> selectedIds = null, ScanStats stats = null)
         {
             _doc = doc;
+            _selectedIds = selectedIds != null ? selectedIds.ToList() : new List<ObjectId>();
+            _selectedSet = new HashSet<ObjectId>(_selectedIds);
+            _scanStats = stats;
             _allItems = new BindingList<BlockItem>(items);
             _bindingSource = new BindingSource { DataSource = _allItems };
 
@@ -75,9 +87,27 @@ namespace LHBBlockScheduler.UI
             LoadThumbnailsAsync();
             ApplyColumnVisibilityFromSettings();
             ApplyColumnHeadersFromSettings();
+            UpdateStatus();
+            _binding = DocumentBinding.Bind(this, doc);
             FormClosed += (s, e) => ReleaseResources();
 
-            Logger.Log($"BlockScheduleForm: mở form với {items.Count} dòng");
+            Logger.Log($"BlockScheduleForm: mở form với {items.Count} dòng, {_selectedIds.Count} đối tượng đã chọn, bản vẽ '{_doc?.Name}'");
+        }
+
+        /// <summary>Bản vẽ của form đang active (không thì báo và trả false) - gọi trước mọi thao tác trên bản vẽ.</summary>
+        private bool EnsureDocActive() => _binding == null || _binding.EnsureActive(this);
+
+        /// <summary>Thanh trạng thái: số dòng / block + số liệu lần quét (ARRAY, MINSERT, XREF, cảnh báo độ sâu).</summary>
+        private void UpdateStatus()
+        {
+            if (_lblStatus == null) return;
+            int blocks = _allItems.Sum(i => i.Count);
+            string text = $"{_allItems.Count} dòng, {blocks} block";
+            if (_scanStats != null) text += " | " + _scanStats.Summary();
+            string warn = _scanStats?.DepthWarning();
+            _lblStatus.Text = warn != null ? text + " | ⚠ " + warn : text;
+            _lblStatus.ForeColor = warn != null ? Color.FromArgb(192, 57, 43) : SystemColors.ControlText;
+            _lblStatus.ToolTipText = warn ?? _scanStats?.Summary() ?? "";
         }
 
         private static Bitmap CreateCircleBitmap(Color color)
@@ -108,7 +138,7 @@ namespace LHBBlockScheduler.UI
 
         private void BuildUi()
         {
-            Text = "LHB Block Scheduler - Thống kê Block v9.3 Premium";
+            Text = $"LHB Block Scheduler - Thống kê Block {MyApp.DisplayVersion} - {Path.GetFileName(_doc?.Name ?? "")}";
             Width = 1280;
             Height = 710;
             StartPosition = FormStartPosition.CenterScreen;
@@ -188,25 +218,27 @@ namespace LHBBlockScheduler.UI
             var lblDepth = new Label { Text = "Độ sâu quét:", AutoSize = true, Padding = new Padding(0, 5, 0, 0) };
             _cboScanDepth = new ComboBox { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
             _cboScanDepth.Items.AddRange(new object[] { "1 (chỉ tầng ngoài)", "2", "3", "Không giới hạn" });
-            _cboScanDepth.SelectedIndex = 1; // Mặc định 2
-            _cboScanDepth.SelectedIndexChanged += (s, e) => TriggerReExtraction();
+            // v9.4: tuỳ chọn quét lấy từ settings và lưu lại khi đổi -> LHBSCAN lần sau, lệnh Premium, nhiều bản vẽ dùng
+            // đúng tuỳ chọn user đang chọn (trước đây luôn về mặc định Độ sâu 2 mỗi lần mở form)
+            _cboScanDepth.SelectedIndex = DepthToIndex(SettingsManager.Current.ScanDepth);
+            _cboScanDepth.SelectedIndexChanged += (s, e) => OnScanOptionChanged();
 
             _chkCountParents = new CheckBox
             {
                 Text = "Đếm cả block cha",
                 AutoSize = true,
                 Padding = new Padding(8, 4, 0, 0),
-                Checked = false
+                Checked = SettingsManager.Current.CountParentBlocks
             };
             _chkCountParents.CheckedChanged += (s, e) =>
             {
-                if (_chkCountParents.Checked && !_hasWarnedCountParents)
+                if (_chkCountParents.Checked && !_hasWarnedCountParents && !_isUpdatingUi)
                 {
                     _hasWarnedCountParents = true;
                     MessageBox.Show("Bật 'Đếm cả block cha' sẽ tính cả cụm block phòng/tổ hợp lẫn các block thiết bị con bên trong, có thể dẫn đến trùng lặp số lượng vật tư!",
                         "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
-                TriggerReExtraction();
+                OnScanOptionChanged();
             };
 
             _chkSplitVisibility = new CheckBox
@@ -214,18 +246,32 @@ namespace LHBBlockScheduler.UI
                 Text = "Tách theo chủng loại",
                 AutoSize = true,
                 Padding = new Padding(8, 4, 0, 0),
-                Checked = true
+                Checked = SettingsManager.Current.SplitByVisibility
             };
-            _chkSplitVisibility.CheckedChanged += (s, e) => TriggerReExtraction();
+            _chkSplitVisibility.CheckedChanged += (s, e) => OnScanOptionChanged();
 
             _chkSplitLayer = new CheckBox
             {
                 Text = "Tách theo layer",
                 AutoSize = true,
                 Padding = new Padding(8, 4, 0, 0),
-                Checked = false
+                Checked = SettingsManager.Current.SplitByLayer
             };
-            _chkSplitLayer.CheckedChanged += (s, e) => TriggerReExtraction();
+            _chkSplitLayer.CheckedChanged += (s, e) => OnScanOptionChanged();
+
+            // v9.4: XREF mặc định bỏ qua (trước đây XREF bị đếm như 1 block, block kiến trúc trong XREF lẫn vào bảng)
+            _chkXref = new CheckBox
+            {
+                Text = "Đếm trong XREF",
+                AutoSize = true,
+                Padding = new Padding(8, 4, 0, 0),
+                Checked = SettingsManager.Current.CountXrefBlocks
+            };
+            _chkXref.CheckedChanged += (s, e) => OnScanOptionChanged();
+            _tips.SetToolTip(_chkXref, "Tắt (mặc định): bỏ qua bản vẽ tham chiếu ngoài (XREF) và mọi block bên trong.\n" +
+                                       "Bật: đếm cả block nằm trong XREF (tên block dạng XREF|TÊN).");
+            _tips.SetToolTip(_cboScanDepth, "Số tầng block lồng được duyệt. ARRAY / MINSERT / XREF không tính là 1 tầng.\n" +
+                                            "Khi 'Chỉ quét block mẫu' đang bật: tìm block mẫu ở mọi tầng.");
 
             var btnNameFromVis = MakeButton("Lấy tên từ chủng loại", Btn_NameFromVis_Click, 140);
 
@@ -254,7 +300,7 @@ namespace LHBBlockScheduler.UI
             var btnAlignCenter = MakeButton("Giữa", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Center), 50);
             var btnAlignRight = MakeButton("Phải", (s, e) => ApplyAlignmentToSelectedCells(CellHAlign.Right), 50);
 
-            row2.Controls.AddRange(new Control[] { lblDepth, _cboScanDepth, _chkCountParents, _chkSplitVisibility, _chkSplitLayer, btnNameFromVis,
+            row2.Controls.AddRange(new Control[] { lblDepth, _cboScanDepth, _chkCountParents, _chkSplitVisibility, _chkSplitLayer, _chkXref, btnNameFromVis,
                                                    btnFindDup, _chkExcludeDup, lblAlign, btnAlignLeft, btnAlignCenter, btnAlignRight });
 
             // Dock Fill phải thêm TRƯỚC (được xếp sau cùng, lấy phần còn lại dưới hàng Top)
@@ -350,8 +396,15 @@ namespace LHBBlockScheduler.UI
                 btnUp, btnDown, btnAddRow, btnDelete, lblScale, _numScale, btnMeasureScale, _cboTableKind, btnExport, btnExcel
             });
 
+            // Thanh trạng thái (v9.4): số liệu lần quét - block trong ARRAY / MINSERT / XREF, cảnh báo giới hạn độ sâu
+            var statusStrip = new StatusStrip { SizingGrip = false, ShowItemToolTips = true };
+            _lblStatus = new ToolStripStatusLabel { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+            statusStrip.Items.Add(_lblStatus);
+
+            // Dock: thêm trước = xếp sau cùng -> lưới (Fill) thêm đầu tiên, thanh trạng thái nằm dưới cùng
             Controls.Add(_grid);
             Controls.Add(bottomPanel);
+            Controls.Add(statusStrip);
             Controls.Add(topContainer);
         }
 
@@ -545,7 +598,7 @@ namespace LHBBlockScheduler.UI
                     break;
                 // Nguồn (Model / Lồng)
                 case "colSource":
-                    e.Value = item.NestDepth == 0 ? "Model" : $"Lồng ({item.NestDepth})";
+                    e.Value = SourceText(item);
                     break;
                 case "colLayer":
                     e.Value = item.AllLayers != null && item.AllLayers.Length > 1
@@ -583,7 +636,41 @@ namespace LHBBlockScheduler.UI
                 case "colLayer":
                     if (item.AllLayers != null && item.AllLayers.Length > 1) e.ToolTipText = string.Join("\n", item.AllLayers);
                     break;
+                case "colSource":
+                    e.ToolTipText = SourceTooltip(item);
+                    break;
             }
+        }
+
+        /// <summary>Cột Nguồn: Model / Lồng (n), kèm ARRAY / MINSERT / XREF nếu có block nằm trong đó (v9.4).</summary>
+        private static string SourceText(BlockItem item)
+        {
+            string text = item.NestDepth == 0 ? "Model" : $"Lồng ({item.NestDepth})";
+            var via = RefVia.None;
+            if (item.Instances != null) foreach (var i in item.Instances) via |= i.Via;
+            if (via == RefVia.None) return text;
+            var tags = new List<string>();
+            if ((via & RefVia.Array) != 0) tags.Add("ARRAY");
+            if ((via & RefVia.MInsert) != 0) tags.Add("MINSERT");
+            if ((via & RefVia.Xref) != 0) tags.Add("XREF");
+            if ((via & RefVia.Anonymous) != 0) tags.Add("ẩn danh");
+            return text + " + " + string.Join("/", tags);
+        }
+
+        private static string SourceTooltip(BlockItem item)
+        {
+            if (item.Instances == null || item.Instances.Count == 0) return null;
+            int direct = item.Instances.Count(i => i.Via == RefVia.None);
+            int arr = item.Instances.Count(i => (i.Via & RefVia.Array) != 0);
+            int mi = item.Instances.Count(i => (i.Via & RefVia.MInsert) != 0);
+            int xr = item.Instances.Count(i => (i.Via & RefVia.Xref) != 0);
+            int an = item.Instances.Count(i => (i.Via & RefVia.Anonymous) != 0);
+            var lines = new List<string> { $"Đặt trực tiếp / trong block cha: {direct}" };
+            if (arr > 0) lines.Add($"Trong ARRAY: {arr}");
+            if (mi > 0) lines.Add($"Phần tử MINSERT: {mi}");
+            if (xr > 0) lines.Add($"Trong XREF: {xr}");
+            if (an > 0) lines.Add($"Trong block ẩn danh: {an}");
+            return string.Join("\n", lines);
         }
 
         private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
@@ -668,9 +755,10 @@ namespace LHBBlockScheduler.UI
             }
 
             var item = ItemAt(e.RowIndex);
-            if (item != null && item.ObjectIds != null && item.ObjectIds.Count > 0)
+            if (item != null && item.Instances != null && item.Instances.Count > 0 && EnsureDocActive())
             {
-                ScheduleManager.ZoomAndHighlight(_doc, item.ObjectIds);
+                // v9.4: zoom theo vị trí WCS từng block (đúng cả block lồng / trong ARRAY / MINSERT)
+                ScheduleManager.ZoomAndHighlightItem(_doc, item);
             }
         }
 
@@ -877,7 +965,7 @@ namespace LHBBlockScheduler.UI
         private void Action_CaptureDrawingWindow()
         {
             var selectedItems = GetSelectedItems();
-            if (selectedItems.Count == 0) return;
+            if (selectedItems.Count == 0 || !EnsureDocActive()) return;
 
             Hide();
             try
@@ -986,27 +1074,75 @@ namespace LHBBlockScheduler.UI
             }
         }
 
-        private ExtractionOptions CurrentOptions() => new ExtractionOptions
-        {
-            MaxDepth = GetSelectedMaxDepth(),
-            CountParentBlocks = _chkCountParents.Checked,
-            SplitByVisibility = _chkSplitVisibility.Checked,
-            SplitByLayer = _chkSplitLayer.Checked,
-            SplitAttributeKeys = (SettingsManager.Current.SplitAttributeKeys ?? new List<string>()).ToList()
-        };
+        private static int DepthToIndex(int depth) => depth <= 1 ? 0 : depth == 2 ? 1 : depth == 3 ? 2 : 3;
 
+        /// <summary>Tuỳ chọn quét đang chọn trên form. Bộ block mẫu lọc khi "Chỉ quét block mẫu" bật và bộ có block.</summary>
+        private ExtractionOptions CurrentOptions()
+        {
+            var template = CurrentTemplate();
+            return new ExtractionOptions
+            {
+                MaxDepth = GetSelectedMaxDepth(),
+                CountParentBlocks = _chkCountParents.Checked,
+                SplitByVisibility = _chkSplitVisibility.Checked,
+                SplitByLayer = _chkSplitLayer.Checked,
+                SplitAttributeKeys = (SettingsManager.Current.SplitAttributeKeys ?? new List<string>()).ToList(),
+                CountXrefBlocks = _chkXref.Checked,
+                TemplateFilter = TemplateLibraryManager.IsFilterActive(template) ? template : null
+            };
+        }
+
+        /// <summary>Đổi tuỳ chọn quét: lưu vào settings (dùng lại cho LHBSCAN / lệnh Premium) rồi quét lại vùng chọn.</summary>
+        private void OnScanOptionChanged()
+        {
+            if (_isUpdatingUi) return;
+            var s = SettingsManager.Current;
+            s.ScanDepth = GetSelectedMaxDepth();
+            s.CountParentBlocks = _chkCountParents.Checked;
+            s.SplitByVisibility = _chkSplitVisibility.Checked;
+            s.SplitByLayer = _chkSplitLayer.Checked;
+            s.CountXrefBlocks = _chkXref.Checked;
+            SettingsManager.SaveSettings();
+            TriggerReExtraction();
+        }
+
+        /// <summary>
+        /// Quét lại vùng chọn của form với tuỳ chọn hiện tại. v9.4: dùng vùng chọn riêng của form, chặn khi bản vẽ không
+        /// active / đã đóng, bọc try/catch (trước đây lỗi ở đây ném thẳng ra event handler của WinForms).
+        /// </summary>
         private void TriggerReExtraction()
         {
-            if (_isUpdatingUi || BlockExtractor.LastSelectedObjectIds.Count == 0) return;
+            if (_isUpdatingUi || _selectedIds.Count == 0) return;
+            if (!EnsureDocActive()) return;
 
             Cursor.Current = Cursors.WaitCursor;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var newItems = BlockExtractor.ExtractFromObjectIds(_doc, BlockExtractor.LastSelectedObjectIds, CurrentOptions());
-            newItems = TemplateLibraryManager.Apply(newItems, CurrentTemplate(), TemplateLibraryManager.IsFilterActive(CurrentTemplate()));
+            try
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var alive = _selectedIds.Where(id => !id.IsNull && id.IsValid && !id.IsErased).ToList();
+                var options = CurrentOptions();
+                List<BlockItem> newItems;
+                using (_doc.LockDocument())
+                    newItems = BlockExtractor.ExtractFromObjectIds(_doc, alive, options);
+                newItems = TemplateLibraryManager.Apply(newItems, CurrentTemplate(), options.TemplateMode);
 
-            ReplaceAllItems(newItems);
-            RecomputeDuplicates();
-            Logger.Log($"[BlockScheduleForm] Quét lại {BlockExtractor.LastSelectedObjectIds.Count} đối tượng -> {newItems.Count} dòng trong {sw.ElapsedMilliseconds} ms");
+                ReplaceAllItems(newItems);
+                RecomputeDuplicates();
+                _scanStats = options.Stats;
+                UpdateStatus();
+                Logger.Log($"[BlockScheduleForm] Quét lại {alive.Count}/{_selectedIds.Count} đối tượng còn tồn tại [{options}] -> {newItems.Count} dòng " +
+                           $"trong {sw.ElapsedMilliseconds} ms");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "[BlockScheduleForm] Quét lại");
+                MessageBox.Show(this, $"Quét lại lỗi: {ex.Message}\nXem log: {Logger.GetLogFilePath()}", "LHB Block Scheduler",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                Cursor.Current = Cursors.Default;
+            }
         }
 
         // ============================== BLOCK MẪU + QUÉT THÊM ==============================
@@ -1073,17 +1209,25 @@ namespace LHBBlockScheduler.UI
         private void Btn_ScanMore_Click(object sender, EventArgs e)
         {
             _grid.EndEdit();
+            if (!EnsureDocActive()) return;
             var template = CurrentTemplate();
-            bool onlyTemplate = TemplateLibraryManager.IsFilterActive(template);
+            var options = CurrentOptions();
+            bool onlyTemplate = options.TemplateMode;
             string message = null;
             Hide();
             try
             {
                 List<BlockItem> added;
-                int newObjects, already;
+                List<ObjectId> addedIds;
+                int already;
                 using (_doc.LockDocument())
-                    added = BlockExtractor.ExtractAdditionalSelection(_doc, CurrentOptions(), onlyTemplate ? template : null, out newObjects, out already);
+                    added = BlockExtractor.ExtractAdditionalSelection(_doc, options, _selectedSet, out addedIds, out already);
                 if (added == null) return;
+                int newObjects = addedIds.Count;
+                // Vùng chọn của form = cũ + mới (đổi tuỳ chọn sau đó quét lại cả 2)
+                foreach (var id in addedIds)
+                    if (_selectedSet.Add(id)) _selectedIds.Add(id);
+                if (_scanStats == null) _scanStats = options.Stats; else _scanStats.Add(options.Stats);
 
                 added = TemplateLibraryManager.Apply(added, template, onlyTemplate);
 
@@ -1114,7 +1258,9 @@ namespace LHBBlockScheduler.UI
 
                 message = $"\n[LHB] Quét thêm: {newObjects} đối tượng mới" + (already > 0 ? $" (bỏ {already} đã chọn trước)" : "") +
                           $", {blocks} block -> cộng vào {mergedRows} dòng có sẵn, thêm {newRows} dòng mới.\n";
-                Logger.Log($"[BlockScheduleForm.ScanMore] {message.Trim()} Tổng {_allItems.Count} dòng, chỉ block mẫu={onlyTemplate}");
+                if (options.Stats != null) message += $"[LHB] Quét thêm: {options.Stats.Summary()}.\n";
+                UpdateStatus();
+                Logger.Log($"[BlockScheduleForm.ScanMore] {message.Trim()} Tổng {_allItems.Count} dòng, {_selectedIds.Count} đối tượng đã chọn, chỉ block mẫu={onlyTemplate}");
             }
             catch (Exception ex)
             {
@@ -1159,6 +1305,7 @@ namespace LHBBlockScheduler.UI
             RefreshPremiumColumns();
             _bindingSource.ResetBindings(false);
             if (_dupDialog != null && !_dupDialog.IsDisposed) _dupDialog.RefreshList();
+            UpdateStatus();
         }
 
         /// <summary>Sau khi xoá block thừa trên bản vẽ: bỏ các block đã xoá khỏi dòng tương ứng rồi tính lại.</summary>
@@ -1178,6 +1325,7 @@ namespace LHBBlockScheduler.UI
 
         private void Btn_FindDup_Click(object sender, EventArgs e)
         {
+            if (!EnsureDocActive()) return;
             RecomputeDuplicates();
             if (_dupDialog == null || _dupDialog.IsDisposed)
             {
@@ -1265,12 +1413,13 @@ namespace LHBBlockScheduler.UI
         private void Btn_Highlight_Click(object sender, EventArgs e)
         {
             var items = GetSelectedItems();
-            if (items.Count == 0) return;
+            if (items.Count == 0 || !EnsureDocActive()) return;
             ScheduleManager.HighlightItems(_doc, items);
         }
 
         private void Btn_Unhighlight_Click(object sender, EventArgs e)
         {
+            if (!EnsureDocActive()) return;
             ScheduleManager.UnhighlightPrevious(_doc.Database);
             _doc.Editor.UpdateScreen();
         }
@@ -1309,6 +1458,7 @@ namespace LHBBlockScheduler.UI
 
         private void Btn_MeasureScale_Click(object sender, EventArgs e)
         {
+            if (!EnsureDocActive()) return;
             Hide();
             try
             {
@@ -1345,6 +1495,14 @@ namespace LHBBlockScheduler.UI
 
         private void Btn_Export_Click(object sender, EventArgs e)
         {
+            _grid.EndEdit();
+            if (!EnsureDocActive()) return;
+            // v9.4: bảng chèn vào không gian đang làm việc; đang ở Layout (giấy) mà tỉ lệ theo Model -> hỏi dùng tỉ lệ 1
+            double? scale = UiKit.ScaleForCurrentSpace(this, _doc, (double)_numScale.Value);
+            if (scale == null) return;
+            if (Math.Abs(scale.Value - (double)_numScale.Value) > 1e-9)
+                _numScale.Value = (decimal)Math.Max((double)_numScale.Minimum, Math.Min((double)_numScale.Maximum, scale.Value));
+
             Hide();
             try
             {

@@ -18,6 +18,118 @@ namespace LHBBlockScheduler.Core
         public bool SplitByLayer { get; set; } = false;     // tách nhóm theo layer (A.4)
         /// <summary>Tách dòng theo giá trị thuộc tính / tham số (khoá "A:TAG", "D:Tên") - Premium P5.</summary>
         public List<string> SplitAttributeKeys { get; set; } = new List<string>();
+
+        /// <summary>
+        /// v9.4: true = đếm cả block nằm trong XREF. Mặc định false = bỏ qua XREF và mọi thứ bên trong (XREF kiến trúc
+        /// chứa cửa, nội thất... không phải thiết bị của bản vẽ này; trước v9.4 XREF bị đếm như 1 block thường).
+        /// </summary>
+        public bool CountXrefBlocks { get; set; }
+
+        /// <summary>
+        /// v9.4: bộ block mẫu đang lọc ("Chỉ quét block mẫu" bật và bộ có block), null = quét mọi block.
+        /// Có bộ mẫu: đi sâu KHÔNG giới hạn tìm block mẫu; block mẫu là thiết bị (được đếm kể cả khi bên trong có
+        /// block con, chỉ đi vào trong khi bật "Đếm cả block cha"); block khác chỉ là vỏ chứa, không ghi nhận.
+        /// </summary>
+        public TemplateLibrary TemplateFilter { get; set; }
+
+        /// <summary>Số liệu lần quét gần nhất dùng options này (BlockExtractor điền sau khi quét).</summary>
+        public ScanStats Stats { get; internal set; }
+
+        public bool TemplateMode => TemplateFilter?.Entries != null && TemplateFilter.Entries.Count > 0;
+
+        /// <summary>
+        /// Tuỳ chọn quét theo settings (form lưu lại mỗi lần đổi): LHBSCAN, lệnh Premium chạy riêng, nhiều bản vẽ dùng
+        /// chung 1 bộ tuỳ chọn với form (trước v9.4 LHBSCAN luôn dùng mặc định, bỏ qua cột thuộc tính tách dòng).
+        /// </summary>
+        public static ExtractionOptions FromSettings(AppSettings s, TemplateLibrary templateFilter = null) => new ExtractionOptions
+        {
+            MaxDepth = s.ScanDepth > 0 ? s.ScanDepth : 2,
+            CountParentBlocks = s.CountParentBlocks,
+            SplitByVisibility = s.SplitByVisibility,
+            SplitByLayer = s.SplitByLayer,
+            SplitAttributeKeys = (s.SplitAttributeKeys ?? new List<string>()).ToList(),
+            CountXrefBlocks = s.CountXrefBlocks,
+            TemplateFilter = templateFilter
+        };
+
+        public override string ToString() =>
+            $"Depth={(MaxDepth == int.MaxValue ? "max" : MaxDepth.ToString())}, CountParents={CountParentBlocks}, SplitVis={SplitByVisibility}, " +
+            $"SplitLay={SplitByLayer}, Xref={CountXrefBlocks}, BlockMau={(TemplateMode ? "'" + TemplateFilter.Name + "'" : "-")}";
+    }
+
+    /// <summary>
+    /// Số liệu 1 lần quét (v9.4): ghi log + hiện dưới form để user thấy block trong ARRAY / MINSERT / XREF đã được
+    /// xử lý thế nào và block nào bị cắt vì giới hạn độ sâu.
+    /// </summary>
+    public sealed class ScanStats
+    {
+        public int Roots { get; set; }
+        public int Refs { get; set; }
+        public int Arrays { get; set; }
+        public int AnonymousBlocks { get; set; }
+        public int ContainerRefs { get; set; }
+        public int MInserts { get; set; }
+        public int MInsertElements { get; set; }
+        public int XrefsSkipped { get; set; }
+        public int XrefsEntered { get; set; }
+        public int XrefRefs { get; set; }
+        public int Tables { get; set; }
+        public int Hidden { get; set; }
+        public int DepthLimited { get; set; }
+        public int MaxDepth { get; set; }
+        public bool TemplateMode { get; set; }
+        public long ElapsedMs { get; set; }
+        public HashSet<string> DepthLimitedNames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SkippedXrefNames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Block con nằm ngay dưới giới hạn độ sâu (không duyệt tới): tên -> số chỗ.</summary>
+        public Dictionary<string, int> BeyondDepth { get; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>
+        /// Trong BeyondDepth, loại block ĐANG được đếm ở chỗ khác của vùng chọn -> gần như chắc chắn là thiết bị bị sót vì
+        /// độ sâu (vd phòng mẫu -> tủ -> đèn). Chỉ cảnh báo loại này để không báo nhầm block con trang trí của thiết bị.
+        /// </summary>
+        public Dictionary<string, int> MissedByDepth { get; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Cộng số liệu lần quét thêm vào lần quét trước (Quét thêm).</summary>
+        public void Add(ScanStats o)
+        {
+            if (o == null) return;
+            Roots += o.Roots; Refs += o.Refs; Arrays += o.Arrays; AnonymousBlocks += o.AnonymousBlocks; ContainerRefs += o.ContainerRefs;
+            MInserts += o.MInserts; MInsertElements += o.MInsertElements; XrefsSkipped += o.XrefsSkipped; XrefsEntered += o.XrefsEntered;
+            XrefRefs += o.XrefRefs; Tables += o.Tables; Hidden += o.Hidden; DepthLimited += o.DepthLimited; ElapsedMs += o.ElapsedMs;
+            DepthLimitedNames.UnionWith(o.DepthLimitedNames);
+            SkippedXrefNames.UnionWith(o.SkippedXrefNames);
+            foreach (var kv in o.BeyondDepth) BeyondDepth[kv.Key] = (BeyondDepth.TryGetValue(kv.Key, out int n) ? n : 0) + kv.Value;
+            foreach (var kv in o.MissedByDepth) MissedByDepth[kv.Key] = (MissedByDepth.TryGetValue(kv.Key, out int n) ? n : 0) + kv.Value;
+        }
+
+        /// <summary>Câu tóm tắt 1 dòng cho thanh trạng thái form / dòng lệnh.</summary>
+        public string Summary()
+        {
+            var parts = new List<string> { $"{Roots} đối tượng chọn", $"{Refs} block tìm thấy (gồm block cha)" };
+            if (Arrays > 0) parts.Add($"{Arrays} ARRAY ({ContainerRefs} block bên trong)");
+            else if (ContainerRefs > 0) parts.Add($"{ContainerRefs} block trong block ẩn danh");
+            if (AnonymousBlocks > 0 && Arrays > 0) parts.Add($"{AnonymousBlocks} block ẩn danh khác");
+            if (MInserts > 0) parts.Add($"{MInserts} MINSERT = {MInsertElements} phần tử");
+            if (XrefsEntered > 0) parts.Add($"đếm trong {XrefsEntered} XREF ({XrefRefs} block)");
+            if (XrefsSkipped > 0) parts.Add($"bỏ qua {XrefsSkipped} XREF");
+            if (Tables > 0) parts.Add($"bỏ {Tables} bảng");
+            if (Hidden > 0) parts.Add($"bỏ {Hidden} block ẩn (visibility)");
+            return string.Join(" · ", parts);
+        }
+
+        /// <summary>
+        /// Cảnh báo chạm giới hạn độ sâu (null nếu không có): loại block đang được đếm nhưng còn nằm trong block khác sâu
+        /// hơn độ sâu quét nên các chỗ đó chưa được đếm.
+        /// </summary>
+        public string DepthWarning()
+        {
+            if (MissedByDepth.Count == 0 || TemplateMode) return null;
+            int total = MissedByDepth.Values.Sum();
+            string names = string.Join(", ", MissedByDepth.OrderByDescending(kv => kv.Value).Take(5).Select(kv => $"{kv.Key} x{kv.Value}")) +
+                           (MissedByDepth.Count > 5 ? "..." : "");
+            return $"{total} block ({names}) còn nằm trong block khác sâu hơn độ sâu quét {MaxDepth} nên CHƯA được đếm. " +
+                   "Chọn 'Độ sâu quét' lớn hơn (3 / Không giới hạn) để đếm đủ.";
+        }
     }
 
     public class ScannedRef
@@ -45,71 +157,79 @@ namespace LHBBlockScheduler.Core
         public double Rotation { get; set; }
         /// <summary>Thuộc tính "A:TAG" + tham số dynamic "D:Tên" (null nếu block không có).</summary>
         public Dictionary<string, string> Attributes { get; set; }
+        /// <summary>v9.4: block nằm trong ARRAY / MINSERT / XREF (có thể kết hợp).</summary>
+        public RefVia Via { get; set; }
+        /// <summary>v9.4: 1 phần tử của MINSERT (nhiều phần tử dùng chung 1 đối tượng).</summary>
+        public bool IsMInsertElement { get; set; }
     }
 
     public static class BlockExtractor
     {
-        public static List<ObjectId> LastSelectedObjectIds { get; private set; } = new List<ObjectId>();
+        /// <summary>MINSERT lớn hơn mức này chỉ lấy chừng này phần tử (phòng bản vẽ lỗi hàng triệu phần tử treo CAD).</summary>
+        private const int MaxMInsertElements = 100000;
 
         /// <summary>
         /// Cho user quét chọn trên bản vẽ, trích xuất và gom nhóm Block theo ExtractionOptions.
-        /// templateFilter khác null (có block mẫu): chỉ block mẫu (hoặc block cha chứa block mẫu) được chọn.
+        /// options.TemplateFilter khác null (có block mẫu): chỉ block mẫu (hoặc block cha chứa block mẫu) được chọn.
+        /// selectedIds = các đối tượng đã chọn (form giữ lại để quét lại khi đổi tuỳ chọn). Trả null nếu user huỷ.
+        /// v9.4: bỏ biến static LastSelectedObjectIds dùng chung mọi bản vẽ -> mỗi form giữ vùng chọn của bản vẽ mình.
         /// </summary>
-        public static List<BlockItem> ExtractFromSelection(Document doc, ExtractionOptions options = null, TemplateLibrary templateFilter = null,
-                                                           bool remember = true)
+        public static List<BlockItem> ExtractFromSelection(Document doc, ExtractionOptions options, out List<ObjectId> selectedIds)
         {
             options ??= new ExtractionOptions();
-            var ids = PromptSelection(doc, options, templateFilter, "\nQuét chọn vùng cần thống kê: ");
+            selectedIds = null;
+            var ids = PromptSelection(doc, options, "\nQuét chọn vùng cần thống kê: ");
             if (ids == null) return null;
-
-            // Lệnh Premium chạy riêng (soát lỗi, đánh số...) không ghi đè vùng chọn của form thống kê đang mở
-            if (!remember) return ExtractFromObjectIds(doc, ids, options);
-            LastSelectedObjectIds = ids.ToList();
-            return ExtractFromObjectIds(doc, LastSelectedObjectIds, options);
+            selectedIds = ids.Distinct().ToList();
+            return ExtractFromObjectIds(doc, selectedIds, options);
         }
 
         /// <summary>
-        /// "Quét thêm": chọn thêm vùng, chỉ trích xuất đối tượng CHƯA có trong lần chọn trước (chọn lại vùng cũ không
-        /// đếm 2 lần), rồi cộng vào LastSelectedObjectIds. Trả null nếu user huỷ.
+        /// "Quét thêm": chọn thêm vùng, chỉ trích xuất đối tượng CHƯA có trong alreadySelected (chọn lại vùng cũ không
+        /// đếm 2 lần). addedIds = đối tượng mới (form cộng vào vùng chọn của mình). Trả null nếu user huỷ.
         /// </summary>
-        public static List<BlockItem> ExtractAdditionalSelection(Document doc, ExtractionOptions options, TemplateLibrary templateFilter,
-                                                                 out int newObjects, out int alreadySelected)
+        public static List<BlockItem> ExtractAdditionalSelection(Document doc, ExtractionOptions options, ICollection<ObjectId> alreadySelected,
+                                                                 out List<ObjectId> addedIds, out int alreadyCount)
         {
-            newObjects = alreadySelected = 0;
-            var ids = PromptSelection(doc, options, templateFilter, "\nQuét chọn THÊM vùng cần thống kê: ");
+            options ??= new ExtractionOptions();
+            addedIds = new List<ObjectId>();
+            alreadyCount = 0;
+            var ids = PromptSelection(doc, options, "\nQuét chọn THÊM vùng cần thống kê: ");
             if (ids == null) return null;
 
-            var known = new HashSet<ObjectId>(LastSelectedObjectIds);
-            var added = ids.Where(id => !known.Contains(id)).Distinct().ToList();
-            alreadySelected = ids.Length - added.Count;
-            newObjects = added.Count;
-            LastSelectedObjectIds.AddRange(added);
-            Logger.Log($"BlockExtractor.ExtractAdditionalSelection: chọn {ids.Length} đối tượng, mới {added.Count}, đã có từ lần trước {alreadySelected} (bỏ qua), " +
-                       $"tổng đã chọn {LastSelectedObjectIds.Count}");
-            return ExtractFromObjectIds(doc, added, options);
+            var known = alreadySelected as HashSet<ObjectId> ?? new HashSet<ObjectId>(alreadySelected ?? new List<ObjectId>());
+            addedIds = ids.Where(id => !known.Contains(id)).Distinct().ToList();
+            alreadyCount = ids.Length - addedIds.Count;
+            Logger.Log($"BlockExtractor.ExtractAdditionalSelection: chọn {ids.Length} đối tượng, mới {addedIds.Count}, đã có từ lần trước {alreadyCount} (bỏ qua)");
+            return ExtractFromObjectIds(doc, addedIds, options);
         }
 
-        /// <summary>Nhắc chọn đối tượng. Có block mẫu thì gắn bộ lọc vào sự kiện SelectionAdded: đối tượng không phải
-        /// block mẫu bị bỏ ngay khi quét, không sáng lên, không vào vùng chọn.</summary>
-        private static ObjectId[] PromptSelection(Document doc, ExtractionOptions options, TemplateLibrary templateFilter, string message)
+        /// <summary>
+        /// Nhắc chọn đối tượng. v9.4: chỉ cho chọn INSERT (block, MINSERT, ARRAY, XREF) -> chọn ALL không còn trả về
+        /// hàng vạn nét / chữ. Có block mẫu thì gắn thêm bộ lọc vào SelectionAdded: block không phải block mẫu bị bỏ
+        /// ngay khi quét, không sáng lên, không vào vùng chọn.
+        /// </summary>
+        private static ObjectId[] PromptSelection(Document doc, ExtractionOptions options, string message)
         {
             var ed = doc.Editor;
             TemplateSelectionFilter filter = null;
-            if (templateFilter != null && templateFilter.Entries != null && templateFilter.Entries.Count > 0)
+            var template = options.TemplateMode ? options.TemplateFilter : null;
+            if (template != null)
             {
-                filter = new TemplateSelectionFilter(doc.Database, templateFilter, options.MaxDepth);
+                filter = new TemplateSelectionFilter(doc.Database, template, options.CountXrefBlocks);
                 ed.SelectionAdded += filter.OnSelectionAdded;
-                ed.WriteMessage($"\n[LHB] Chỉ quét block mẫu (bộ '{templateFilter.Name}', {templateFilter.Entries.Count} block). " +
+                ed.WriteMessage($"\n[LHB] Chỉ quét block mẫu (bộ '{template.Name}', {template.Entries.Count} block). " +
                                 "Block khác, chữ, nét không được chọn. Tắt ô 'Chỉ quét block mẫu' trên form nếu muốn quét tất cả.");
                 message = message.TrimEnd(':', ' ') + " (chỉ dính block mẫu): ";
             }
 
             try
             {
-                var selRes = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = message });
+                var onlyInserts = new SelectionFilter(new[] { new TypedValue((int)DxfCode.Start, "INSERT") });
+                var selRes = ed.GetSelection(new PromptSelectionOptions { MessageForAdding = message }, onlyInserts);
                 if (selRes.Status != PromptStatus.OK)
                 {
-                    Logger.Log("BlockExtractor: user huỷ chọn (status=" + selRes.Status + ")");
+                    Logger.Log("BlockExtractor: user huỷ chọn / không chọn được block (status=" + selRes.Status + ")");
                     return null;
                 }
                 return selRes.Value.GetObjectIds();
@@ -119,8 +239,8 @@ namespace LHBBlockScheduler.Core
                 if (filter != null)
                 {
                     ed.SelectionAdded -= filter.OnSelectionAdded;
-                    Logger.Log($"[TemplateSelectionFilter] bộ '{templateFilter.Name}': giữ {filter.Kept} block ({filter.KeptAsParent} là block cha chứa block mẫu), " +
-                               $"bỏ {filter.Removed} đối tượng không phải block mẫu");
+                    Logger.Log($"[TemplateSelectionFilter] bộ '{template.Name}': giữ {filter.Kept} block ({filter.KeptAsParent} là block cha / ARRAY chứa block mẫu), " +
+                               $"bỏ {filter.Removed} block không phải block mẫu");
                 }
             }
         }
@@ -164,6 +284,39 @@ namespace LHBBlockScheduler.Core
         internal static Autodesk.AutoCAD.Runtime.RXClass BlockRefClass =>
             _blockRefClass ??= Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
 
+        /// <summary>Loại đối tượng INSERT khi duyệt (v9.4).</summary>
+        internal enum RefKind
+        {
+            /// <summary>Block thường / dynamic block: thiết bị hoặc block cha.</summary>
+            Block,
+            /// <summary>Bảng AutoCAD (Table kế thừa BlockReference): không đếm, không đi vào (ô ký hiệu của bảng thống kê).</summary>
+            Table,
+            /// <summary>XREF: bỏ qua, hoặc là vỏ trong suốt khi bật "Đếm trong XREF".</summary>
+            Xref,
+            /// <summary>ARRAY liên kết / block ẩn danh *U không phải dynamic: vỏ trong suốt, đếm block bên trong.</summary>
+            Container
+        }
+
+        /// <summary>Phân loại 1 INSERT. def = định nghĩa block gốc (DynamicBlockTableRecord).</summary>
+        internal static RefKind Classify(Transaction tr, BlockReference br, out BlockTableRecord def)
+        {
+            def = null;
+            if (br is Table) return RefKind.Table;
+            def = (BlockTableRecord)tr.GetObject(br.DynamicBlockTableRecord, OpenMode.ForRead);
+            if (def.IsFromExternalReference) return RefKind.Xref;
+            if (def.IsLayout) return RefKind.Table; // không xảy ra với bản vẽ hợp lệ, phòng hờ: bỏ qua
+            if (!br.IsDynamicBlock && (def.IsAnonymous || string.IsNullOrEmpty(def.Name) || def.Name.StartsWith("*")))
+                return RefKind.Container;
+            return RefKind.Block;
+        }
+
+        /// <summary>ARRAY liên kết (lệnh ARRAY mặc định) hay block ẩn danh khác - chỉ để ghi log / cột Nguồn.</summary>
+        private static bool IsAssociativeArray(ObjectId id)
+        {
+            try { return AssocArray.IsAssociativeArray(id); }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Bộ nhớ đệm trong 1 lần quét: khung bao theo BTR, danh sách block con theo BTR (định nghĩa block không đổi
         /// trong lúc quét -> 5000 đầu phun cùng định nghĩa chỉ duyệt nội dung định nghĩa 1 lần thay vì 5000 lần).
@@ -173,36 +326,315 @@ namespace LHBBlockScheduler.Core
             public readonly HashSet<ObjectId> Visiting = new HashSet<ObjectId>();
             public readonly Dictionary<ObjectId, Extents3d?> Extents = new Dictionary<ObjectId, Extents3d?>();
             public readonly Dictionary<ObjectId, List<ObjectId>> ChildRefs = new Dictionary<ObjectId, List<ObjectId>>();
+            /// <summary>Tên các block con đang hiện của 1 BTR (kiểm tra khi chạm giới hạn độ sâu).</summary>
+            public readonly Dictionary<ObjectId, List<string>> VisibleKidNames = new Dictionary<ObjectId, List<string>>();
+            /// <summary>Chế độ block mẫu: BTR không chứa block mẫu nào ở mọi tầng -> không duyệt lại.</summary>
+            public readonly HashSet<ObjectId> NoTemplateBtrs = new HashSet<ObjectId>();
+            public ExtractionOptions Options;
+            public TemplateLibrary Template;
+            public HashSet<string> TemplateNames;
+            public ScanStats Stats;
         }
 
         private static List<ScannedRef> ScanRefs(Database db, IEnumerable<ObjectId> rootIds, ExtractionOptions options)
         {
             var scannedRefs = new List<ScannedRef>();
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            var stats = new ScanStats { MaxDepth = options.MaxDepth, TemplateMode = options.TemplateMode };
+            var cache = new ScanCache { Options = options, Stats = stats };
+            if (options.TemplateMode)
+            {
+                cache.Template = options.TemplateFilter;
+                cache.TemplateNames = new HashSet<string>(options.TemplateFilter.Entries.Select(e => e.BlockName), StringComparer.OrdinalIgnoreCase);
+            }
 
             using (var tr = db.TransactionManager.StartTransaction())
             {
-                var cache = new ScanCache();
-                int roots = 0;
-
                 foreach (var id in rootIds)
                 {
                     // Lọc theo loại trước khi mở: vùng chọn có hàng vạn nét / chữ không phải block
                     if (id.IsNull || !id.IsValid || id.IsErased || !id.ObjectClass.IsDerivedFrom(BlockRefClass)) continue;
                     if (!(tr.GetObject(id, OpenMode.ForRead) is BlockReference br)) continue;
-                    roots++;
-
-                    var pathSoFar = new List<ObjectId> { br.ObjectId };
-                    WalkBlockReference(tr, br, Matrix3d.Identity, 0, options.MaxDepth, pathSoFar, scannedRefs, cache);
+                    if (!br.Visible) { stats.Hidden++; continue; }
+                    stats.Roots++;
+                    Walk(tr, br, Matrix3d.Identity, 0, new List<ObjectId> { br.ObjectId }, RefVia.None, scannedRefs, cache);
                 }
-
-                int noCorners = scannedRefs.Count(r => r.Corners == null);
-                Logger.Log($"BlockExtractor: quét {roots} block gốc -> {scannedRefs.Count} block, {cache.Extents.Count} định nghĩa block khác nhau, " +
-                           $"{sw.ElapsedMilliseconds} ms" +
-                           (noCorners > 0 ? $", {noCorners} block không tính được khung bao (chỉ so trùng theo điểm chèn)" : ""));
                 tr.Commit();
             }
+
+            stats.Refs = scannedRefs.Count;
+            stats.ElapsedMs = sw.ElapsedMilliseconds;
+            // Block con bị cắt vì độ sâu mà cùng loại với thiết bị đang đếm -> thiết bị bị sót
+            if (stats.BeyondDepth.Count > 0)
+            {
+                var counted = new HashSet<string>(scannedRefs.Where(r => options.CountParentBlocks || !r.HasChildren).Select(r => r.BlockName),
+                                                  StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in stats.BeyondDepth)
+                    if (counted.Contains(kv.Key)) stats.MissedByDepth[kv.Key] = kv.Value;
+                Logger.Log($"BlockExtractor: {stats.DepthLimited} block chạm giới hạn độ sâu {options.MaxDepth} " +
+                           $"[{string.Join(", ", stats.DepthLimitedNames.Take(10))}], block con không duyệt tới: " +
+                           $"[{string.Join(", ", stats.BeyondDepth.Take(20).Select(kv => kv.Key + " x" + kv.Value))}]");
+            }
+            options.Stats = stats;
+            int noCorners = scannedRefs.Count(r => r.Corners == null);
+            Logger.Log($"BlockExtractor: quét [{options}] -> {stats.Summary()}; {cache.Extents.Count} định nghĩa block khác nhau, {stats.ElapsedMs} ms" +
+                       (noCorners > 0 ? $", {noCorners} block không tính được khung bao (chỉ so trùng theo điểm chèn)" : ""));
+            if (stats.SkippedXrefNames.Count > 0)
+                Logger.Log($"BlockExtractor: XREF bỏ qua (bật 'Đếm trong XREF' để đếm block bên trong): [{string.Join(", ", stats.SkippedXrefNames)}]");
+            string depthWarn = stats.DepthWarning();
+            if (depthWarn != null) Logger.Warn("BlockExtractor: " + depthWarn);
             return scannedRefs;
+        }
+
+        /// <summary>
+        /// Duyệt 1 INSERT ở tầng depth (0 = nằm trực tiếp trong vùng chọn), path = đường dẫn ObjectId tới chính nó.
+        /// ARRAY / block ẩn danh / XREF (khi bật đếm) là vỏ trong suốt: không ghi nhận chính nó, block bên trong giữ
+        /// nguyên tầng của vỏ (trước v9.4 ARRAY bị bỏ qua cả cụm, XREF bị đếm như 1 block). Trả true nếu có duyệt
+        /// (không phải bảng / XREF bỏ qua) - để biết block cha có block con thật hay không.
+        /// </summary>
+        private static bool Walk(Transaction tr, BlockReference br, Matrix3d parentXform, int depth, List<ObjectId> path,
+                                 RefVia via, List<ScannedRef> results, ScanCache cache)
+        {
+            try
+            {
+                switch (Classify(tr, br, out var def))
+                {
+                    case RefKind.Table:
+                        cache.Stats.Tables++;
+                        return false;
+
+                    case RefKind.Xref:
+                        if (!cache.Options.CountXrefBlocks)
+                        {
+                            cache.Stats.XrefsSkipped++;
+                            cache.Stats.SkippedXrefNames.Add(def.Name);
+                            return false;
+                        }
+                        cache.Stats.XrefsEntered++;
+                        if (!def.IsResolved)
+                            Logger.Warn($"BlockExtractor: XREF '{def.Name}' chưa nạp / không tìm thấy file (XrefStatus={def.XrefStatus}) -> không có block bên trong để đếm");
+                        int beforeXref = results.Count;
+                        WalkContainer(tr, br, parentXform, depth, path, via | RefVia.Xref, results, cache);
+                        // Chỉ cộng ở XREF ngoài cùng (XREF lồng trong XREF không cộng 2 lần)
+                        if ((via & RefVia.Xref) == 0) cache.Stats.XrefRefs += results.Count - beforeXref;
+                        return true;
+
+                    case RefKind.Container:
+                        bool isArray = IsAssociativeArray(br.ObjectId);
+                        if (isArray) cache.Stats.Arrays++;
+                        else cache.Stats.AnonymousBlocks++;
+                        int beforeArray = results.Count;
+                        WalkContainer(tr, br, parentXform, depth, path, via | (isArray ? RefVia.Array : RefVia.Anonymous), results, cache);
+                        if ((via & (RefVia.Array | RefVia.Anonymous)) == 0) cache.Stats.ContainerRefs += results.Count - beforeArray;
+                        return true;
+
+                    default:
+                        WalkBlock(tr, br, def, parentXform, depth, path, via, results, cache);
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"BlockExtractor.Walk Handle={br?.Handle}");
+                return false;
+            }
+        }
+
+        /// <summary>Vỏ trong suốt (ARRAY, block ẩn danh, XREF): duyệt block bên trong ở cùng tầng, không ghi nhận chính nó.</summary>
+        private static void WalkContainer(Transaction tr, BlockReference br, Matrix3d parentXform, int depth, List<ObjectId> path,
+                                          RefVia via, List<ScannedRef> results, ScanCache cache)
+        {
+            foreach (var off in ElementOffsets(br, cache.Stats))
+            {
+                var xform = parentXform * Matrix3d.Displacement(off) * br.BlockTransform;
+                WalkChildren(tr, br.BlockTableRecord, xform, depth, path, via, results, cache);
+            }
+        }
+
+        /// <summary>
+        /// Block thật: ghi nhận (thiết bị / block cha) rồi đi vào block con theo độ sâu. MINSERT = Rows x Columns phần tử,
+        /// mỗi phần tử ghi nhận riêng với vị trí riêng (trước v9.4 MINSERT 4x5 chỉ đếm 1).
+        /// </summary>
+        private static void WalkBlock(Transaction tr, BlockReference br, BlockTableRecord def, Matrix3d parentXform, int depth,
+                                      List<ObjectId> path, RefVia via, List<ScannedRef> results, ScanCache cache)
+        {
+            string realName = def.Name;
+            bool isDynamic = br.IsDynamicBlock;
+
+            // Xác định BlockKind
+            string kind;
+            if (isDynamic) kind = "Động";
+            else if (def.HasAttributeDefinitions) kind = "Có thuộc tính";
+            else kind = "Tĩnh";
+
+            bool templateMode = cache.Template != null;
+            Dictionary<string, string> attributes = null;
+            string visibility = "";
+            bool isTemplate = false;
+            // Chế độ block mẫu: block không trùng tên block mẫu nào thì không cần đọc thuộc tính / tham số dynamic
+            if (!templateMode || cache.TemplateNames.Contains(realName) || cache.TemplateNames.Contains(TemplateLibraryManager.StripXrefPrefix(realName)))
+            {
+                attributes = ReadAttributes(tr, br);
+                visibility = ReadDynamic(br, realName, ref attributes);
+                isTemplate = templateMode && TemplateLibraryManager.Match(cache.Template, realName, visibility) != null;
+            }
+            // Chế độ block mẫu: chỉ block mẫu được ghi nhận, block khác là vỏ chứa; đi sâu không giới hạn,
+            // chỉ đi vào trong block mẫu khi đếm cả block cha. Chế độ thường: theo độ sâu quét.
+            bool record = !templateMode || isTemplate;
+            bool descend = templateMode ? (!isTemplate || cache.Options.CountParentBlocks) : depth + 1 < cache.Options.MaxDepth;
+
+            var offsets = ElementOffsets(br, cache.Stats);
+            bool isMInsert = br is MInsertBlock && offsets.Count > 1;
+            var childVia = isMInsert ? via | RefVia.MInsert : via;
+
+            foreach (var off in offsets)
+            {
+                Matrix3d currentXform = parentXform * Matrix3d.Displacement(off) * br.BlockTransform;
+                ScannedRef currentRef = null;
+                if (record)
+                {
+                    var cs = currentXform.CoordinateSystem3d;
+                    bool mirrored = cs.Xaxis.CrossProduct(cs.Yaxis).Z < 0;
+                    currentRef = new ScannedRef
+                    {
+                        BrId = br.ObjectId,
+                        DynamicBtrId = def.ObjectId,
+                        InstanceBtrId = br.BlockTableRecord,
+                        BlockName = realName,
+                        BlockKind = kind,
+                        VisibilityState = visibility,
+                        Layer = br.Layer,
+                        Depth = depth,
+                        ContainerPath = path.ToArray(),
+                        Transform = currentXform,
+                        OwnerTransform = parentXform,
+                        Position = (br.Position + off).TransformBy(parentXform),
+                        Corners = ComputeCorners(tr, br.BlockTableRecord, currentXform, cache.Extents),
+                        HasChildren = false,
+                        ScaleX = cs.Xaxis.Length,
+                        ScaleY = mirrored ? -cs.Yaxis.Length : cs.Yaxis.Length,
+                        Rotation = Math.Atan2(cs.Xaxis.Y, cs.Xaxis.X),
+                        Attributes = attributes,
+                        Via = childVia,
+                        IsMInsertElement = isMInsert
+                    };
+                    results.Add(currentRef);
+                }
+
+                if (descend)
+                {
+                    bool hasChildren = WalkChildren(tr, br.BlockTableRecord, currentXform, depth + 1, path, childVia, results, cache);
+                    // Chế độ block mẫu: block mẫu luôn được đếm (không coi là block cha bị loại)
+                    if (currentRef != null && hasChildren && !isTemplate) currentRef.HasChildren = true;
+                }
+                else if (currentRef != null && !templateMode)
+                {
+                    // Chạm giới hạn độ sâu: block này có block con nhưng không duyệt -> đếm như block lá; ghi lại tên block con
+                    // để cảnh báo nếu cùng loại với thiết bị đang đếm ở chỗ khác
+                    var kids = VisibleChildNames(tr, br.BlockTableRecord, cache);
+                    if (kids.Count > 0)
+                    {
+                        cache.Stats.DepthLimited++;
+                        cache.Stats.DepthLimitedNames.Add(realName);
+                        foreach (var k in kids)
+                            cache.Stats.BeyondDepth[k] = (cache.Stats.BeyondDepth.TryGetValue(k, out int n) ? n : 0) + 1;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Duyệt các block con đang HIỆN trong 1 BTR (v9.4: bỏ block con bị ẩn theo trạng thái visibility của dynamic
+        /// block cha, trước đây vẫn đếm). Trả true nếu có ít nhất 1 block con thật (không tính bảng / XREF bỏ qua).
+        /// </summary>
+        private static bool WalkChildren(Transaction tr, ObjectId btrId, Matrix3d xform, int childDepth, List<ObjectId> pathSoFar,
+                                         RefVia via, List<ScannedRef> results, ScanCache cache)
+        {
+            bool templateMode = cache.Template != null;
+            if (templateMode && cache.NoTemplateBtrs.Contains(btrId)) return true;
+            if (!cache.Visiting.Add(btrId)) return false; // định nghĩa block tự chứa chính nó (bản vẽ lỗi)
+
+            bool any = false;
+            int before = results.Count;
+            try
+            {
+                foreach (ObjectId childId in ChildBlockRefs(tr, btrId, cache))
+                {
+                    if (!(tr.GetObject(childId, OpenMode.ForRead) is BlockReference childBr)) continue;
+                    if (!childBr.Visible)
+                    {
+                        cache.Stats.Hidden++;
+                        continue;
+                    }
+                    var childPath = new List<ObjectId>(pathSoFar) { childId };
+                    if (Walk(tr, childBr, xform, childDepth, childPath, via, results, cache)) any = true;
+                }
+            }
+            finally
+            {
+                cache.Visiting.Remove(btrId);
+            }
+            // Nội dung định nghĩa block không đổi trong lúc quét: không có block mẫu thì các bản khác cũng không có
+            if (templateMode && results.Count == before) cache.NoTemplateBtrs.Add(btrId);
+            return any;
+        }
+
+        /// <summary>
+        /// Tên các block con thật đang hiện trong 1 BTR (mỗi instance 1 tên, bỏ bảng, bỏ XREF, ARRAY tính theo tên block bên
+        /// trong 1 tầng) - nhớ theo BTR. Dùng khi chạm giới hạn độ sâu.
+        /// </summary>
+        private static List<string> VisibleChildNames(Transaction tr, ObjectId btrId, ScanCache cache)
+        {
+            if (cache.VisibleKidNames.TryGetValue(btrId, out var names)) return names;
+            names = new List<string>();
+            cache.VisibleKidNames[btrId] = names; // chống vòng lặp
+            foreach (ObjectId childId in ChildBlockRefs(tr, btrId, cache))
+            {
+                try
+                {
+                    if (!(tr.GetObject(childId, OpenMode.ForRead) is BlockReference c) || !c.Visible) continue;
+                    switch (Classify(tr, c, out var def))
+                    {
+                        case RefKind.Block:
+                            int n = c is MInsertBlock mi ? Math.Max(1, (int)mi.Rows) * Math.Max(1, (int)mi.Columns) : 1;
+                            for (int i = 0; i < n; i++) names.Add(def.Name);
+                            break;
+                        case RefKind.Container:
+                            names.AddRange(VisibleChildNames(tr, c.BlockTableRecord, cache));
+                            break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"BlockExtractor: đọc block con {childId.Handle} lỗi {ex.Message}");
+                }
+            }
+            return names;
+        }
+
+        /// <summary>
+        /// Độ dời từng phần tử theo toạ độ chủ sở hữu: block thường = [0]; MINSERT = Rows x Columns độ dời
+        /// (cột theo trục X, hàng theo trục Y của block đã xoay, khoảng cách tính bằng đơn vị bản vẽ, không nhân tỉ lệ).
+        /// </summary>
+        private static List<Vector3d> ElementOffsets(BlockReference br, ScanStats stats)
+        {
+            if (!(br is MInsertBlock mi)) return new List<Vector3d>(1) { new Vector3d(0, 0, 0) };
+            int rows = Math.Max(1, (int)mi.Rows), cols = Math.Max(1, (int)mi.Columns);
+            long total = (long)rows * cols;
+            stats.MInserts++;
+            if (total > MaxMInsertElements)
+            {
+                Logger.Warn($"BlockExtractor: MINSERT Handle={br.Handle} có {rows}x{cols} = {total} phần tử (quá lớn) -> chỉ lấy {MaxMInsertElements}");
+                rows = Math.Max(1, MaxMInsertElements / cols);
+                if (rows * (long)cols > MaxMInsertElements) { rows = 1; cols = MaxMInsertElements; }
+            }
+            var toOwner = Matrix3d.PlaneToWorld(mi.Normal);
+            var list = new List<Vector3d>(rows * cols);
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    list.Add(new Vector3d(c * mi.ColumnSpacing, r * mi.RowSpacing, 0).RotateBy(mi.Rotation, Vector3d.ZAxis).TransformBy(toOwner));
+            stats.MInsertElements += list.Count;
+            return list;
         }
 
         /// <summary>Block con (BlockReference) nằm trực tiếp trong 1 BTR, nhớ theo BTR.</summary>
@@ -293,9 +725,8 @@ namespace LHBBlockScheduler.Core
         /// block là BTR ẩn danh đúng chủng loại) rồi biến đổi theo ma trận của block. Cache extents theo BTR vì
         /// hàng nghìn block cùng định nghĩa (sprinkler) chỉ cần tính 1 lần.
         /// </summary>
-        private static Point2d[] ComputeCorners(Transaction tr, BlockReference br, Matrix3d xform, Dictionary<ObjectId, Extents3d?> extCache)
+        private static Point2d[] ComputeCorners(Transaction tr, ObjectId btrId, Matrix3d xform, Dictionary<ObjectId, Extents3d?> extCache)
         {
-            ObjectId btrId = br.BlockTableRecord;
             if (!extCache.TryGetValue(btrId, out var ext))
             {
                 ext = null;
@@ -329,81 +760,6 @@ namespace LHBBlockScheduler.Core
             // Cùng 1 hàm đọc với lúc quét -> lọc block mẫu và gom dòng luôn ra cùng chủng loại
             Dictionary<string, string> ignored = null;
             return ReadDynamic(br, realName, ref ignored);
-        }
-
-        private static void WalkBlockReference(Transaction tr, BlockReference br, Matrix3d parentXform,
-                                              int depth, int maxDepth, List<ObjectId> pathSoFar,
-                                              List<ScannedRef> results, ScanCache cache)
-        {
-            try
-            {
-                ObjectId dynBtrId = br.DynamicBlockTableRecord;
-                var btrDef = (BlockTableRecord)tr.GetObject(dynBtrId, OpenMode.ForRead);
-                string realName = btrDef.Name;
-                bool isDynamic = br.IsDynamicBlock;
-
-                // Bỏ qua block ẩn danh hệ thống (*Model_Space, v.v.), nhưng GIỮ và đếm block A$C...
-                if (string.IsNullOrEmpty(realName) || (realName.StartsWith("*") && !isDynamic))
-                    return;
-
-                // Xác định BlockKind
-                string kind;
-                if (isDynamic) kind = "Động";
-                else if (btrDef.HasAttributeDefinitions) kind = "Có thuộc tính";
-                else kind = "Tĩnh";
-
-                var attributes = ReadAttributes(tr, br);
-                string visibility = ReadDynamic(br, realName, ref attributes);
-
-                Matrix3d currentXform = parentXform * br.BlockTransform;
-                var cs = currentXform.CoordinateSystem3d;
-                bool mirrored = cs.Xaxis.CrossProduct(cs.Yaxis).Z < 0;
-
-                var currentRef = new ScannedRef
-                {
-                    BrId = br.ObjectId,
-                    DynamicBtrId = dynBtrId,
-                    InstanceBtrId = br.BlockTableRecord,
-                    BlockName = realName,
-                    BlockKind = kind,
-                    VisibilityState = visibility,
-                    Layer = br.Layer,
-                    Depth = depth,
-                    ContainerPath = pathSoFar.ToArray(),
-                    Transform = currentXform,
-                    OwnerTransform = parentXform,
-                    Position = br.Position.TransformBy(parentXform),
-                    Corners = ComputeCorners(tr, br, currentXform, cache.Extents),
-                    HasChildren = false,
-                    ScaleX = cs.Xaxis.Length,
-                    ScaleY = mirrored ? -cs.Yaxis.Length : cs.Yaxis.Length,
-                    Rotation = Math.Atan2(cs.Xaxis.Y, cs.Xaxis.X),
-                    Attributes = attributes
-                };
-                results.Add(currentRef);
-
-                // Đệ quy quét block con nếu chưa vượt quá maxDepth
-                if (depth + 1 < maxDepth)
-                {
-                    ObjectId instanceBtrId = br.BlockTableRecord;
-                    if (cache.Visiting.Add(instanceBtrId))
-                    {
-                        var children = ChildBlockRefs(tr, instanceBtrId, cache);
-                        foreach (ObjectId childId in children)
-                        {
-                            if (!(tr.GetObject(childId, OpenMode.ForRead) is BlockReference childBr)) continue;
-                            var childPath = new List<ObjectId>(pathSoFar) { childId };
-                            WalkBlockReference(tr, childBr, currentXform, depth + 1, maxDepth, childPath, results, cache);
-                        }
-                        if (children.Count > 0) currentRef.HasChildren = true;
-                        cache.Visiting.Remove(instanceBtrId);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "BlockExtractor.WalkBlockReference");
-            }
         }
 
         private static List<BlockItem> GroupScannedRefs(Document doc, List<ScannedRef> refs, ExtractionOptions options)
@@ -446,14 +802,17 @@ namespace LHBBlockScheduler.Core
                 list.Add(r);
             }
 
+            // Chữ ký nội dung BTR dùng chung trong lần gom này (nhiều dòng cùng định nghĩa block gốc)
+            var signatureMemo = new Dictionary<ObjectId, string>();
             var items = new List<BlockItem>();
             foreach (var kvp in groupDict)
             {
                 var list = kvp.Value;
                 var first = list[0];
 
-                string displayName = first.BlockName;
-                if (Regex.IsMatch(first.BlockName, @"^A\$[A-Za-z]") && !string.IsNullOrEmpty(first.VisibilityState))
+                // Block trong XREF tên "XREF|TÊN": tên hiển thị bỏ tiền tố (tên block giữ nguyên để không lẫn với block cùng tên của bản vẽ)
+                string displayName = TemplateLibraryManager.StripXrefPrefix(first.BlockName);
+                if (Regex.IsMatch(displayName, @"^A\$[A-Za-z]") && !string.IsNullOrEmpty(first.VisibilityState))
                 {
                     displayName = first.VisibilityState;
                 }
@@ -487,7 +846,9 @@ namespace LHBBlockScheduler.Core
                         ScaleX = x.ScaleX,
                         ScaleY = x.ScaleY,
                         Rotation = x.Rotation,
-                        Attributes = x.Attributes
+                        Attributes = x.Attributes,
+                        Via = x.Via,
+                        IsMInsertElement = x.IsMInsertElement
                     }).ToList()
                 };
 
@@ -498,18 +859,20 @@ namespace LHBBlockScheduler.Core
                     continue;
                 }
 
-                // 1. Ảnh hiển thị trên grid và ô ký hiệu: render từ SourceBtrId (InstanceBtrId khi tách theo chủng loại)
+                // 1. Ảnh hiển thị trên grid và ô ký hiệu: render từ SourceBtrId (InstanceBtrId khi tách theo chủng loại).
+                // v9.4: tên file ảnh kèm chữ ký nội dung định nghĩa block -> block cùng tên khác hình ở bản vẽ khác không
+                // dùng nhầm ảnh cũ (trước đây cache chỉ theo tên block).
                 string cacheKey = (!string.IsNullOrEmpty(item.VisibilityState) && options.SplitByVisibility)
                     ? $"{item.BlockName}_{item.VisibilityState}"
                     : item.BlockName;
 
-                string thumb = ThumbnailGenerator.GetOrCreateThumbnail(doc, item.SourceBtrId, cacheKey);
+                string thumb = ThumbnailGenerator.GetOrCreateThumbnail(doc, item.SourceBtrId, cacheKey, signatureMemo);
                 item.ThumbnailPath = thumb;
 
-                // 2. ShapeHash: LUÔN tính từ DynamicBtrId (block definition gốc bất biến xuyên bản vẽ)
+                // 2. ShapeHash: LUÔN tính từ DynamicBtrId (block definition gốc)
                 if (item.DynamicBtrId.IsValid && !item.DynamicBtrId.IsNull)
                 {
-                    string defThumb = ThumbnailGenerator.GetOrCreateThumbnail(doc, item.DynamicBtrId, $"{item.BlockName}_defhash");
+                    string defThumb = ThumbnailGenerator.GetOrCreateThumbnail(doc, item.DynamicBtrId, $"{item.BlockName}_defhash", signatureMemo);
                     if (!string.IsNullOrEmpty(defThumb))
                     {
                         item.ShapeHash = ThumbnailGenerator.GetHashFromPngFile(defThumb);
@@ -524,7 +887,7 @@ namespace LHBBlockScheduler.Core
             for (int i = 0; i < sorted.Count; i++)
                 sorted[i].Order = i;
 
-            Logger.Log($"BlockExtractor: Gom thành {sorted.Count} nhóm Block (Depth={options.MaxDepth}, CountParents={options.CountParentBlocks}, SplitVis={options.SplitByVisibility}, SplitLay={options.SplitByLayer})");
+            Logger.Log($"BlockExtractor: Gom thành {sorted.Count} nhóm Block [{options}]");
             return sorted;
         }
     }

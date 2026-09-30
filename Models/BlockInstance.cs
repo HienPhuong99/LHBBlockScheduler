@@ -5,6 +5,21 @@ using Autodesk.AutoCAD.Geometry;
 
 namespace LHBBlockScheduler.Models
 {
+    /// <summary>Block nằm trong vỏ nào (v9.4) - hiện ở cột Nguồn, có thể kết hợp (ARRAY trong XREF...).</summary>
+    [System.Flags]
+    public enum RefVia
+    {
+        None = 0,
+        /// <summary>ARRAY liên kết (lệnh ARRAY).</summary>
+        Array = 1,
+        /// <summary>Phần tử của MINSERT (hoặc block con nằm trong phần tử MINSERT).</summary>
+        MInsert = 2,
+        /// <summary>Block của bản vẽ XREF (chỉ khi bật "Đếm trong XREF").</summary>
+        Xref = 4,
+        /// <summary>Block ẩn danh *U khác (không phải ARRAY, không phải dynamic block).</summary>
+        Anonymous = 8
+    }
+
     /// <summary>
     /// 1 block reference cụ thể trên bản vẽ (kể cả block lồng) - dùng để tìm block trùng vị trí.
     /// Chỉ tồn tại trong bộ nhớ, KHÔNG serialize (có ObjectId).
@@ -50,7 +65,17 @@ namespace LHBBlockScheduler.Models
         /// <summary>Thuộc tính (khoá "A:TAG") và tham số dynamic block (khoá "D:Tên") của block này.</summary>
         public Dictionary<string, string> Attributes { get; set; }
 
-        public bool IsTopLevel => Path != null && Path.Length == 1;
+        /// <summary>v9.4: block nằm trong ARRAY / MINSERT / XREF.</summary>
+        public RefVia Via { get; set; }
+
+        /// <summary>
+        /// v9.4: 1 phần tử của MINSERT. Mọi phần tử dùng chung 1 đối tượng (Path[0]) -> không xoá / thay / ghi thuộc tính
+        /// riêng từng phần tử được (xoá 1 phần tử = xoá cả MINSERT).
+        /// </summary>
+        public bool IsMInsertElement { get; set; }
+
+        /// <summary>Nằm trực tiếp trong Model và là 1 đối tượng riêng (xoá / thay / ghi thuộc tính được). Phần tử MINSERT: false.</summary>
+        public bool IsTopLevel => Path != null && Path.Length == 1 && !IsMInsertElement;
 
         /// <summary>Nhóm trùng chứa block này (null = không trùng). DuplicateFinder.Detect gán lại mỗi lần tìm trùng.</summary>
         public DuplicateGroup Group { get; set; }
