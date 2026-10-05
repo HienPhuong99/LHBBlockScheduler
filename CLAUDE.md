@@ -68,7 +68,7 @@ Chưa làm (cần test thật): bundle ApplicationPlugins phát hành 3 Componen
 Cần xác nhận khi có kết quả test v9.7: AutoCAD 2021 vẫn nạp bản gốc + mọi thứ như v9.6; AutoCAD 2025 / 2026 / 2027 nạp đúng
 net8 / net10, form không tràn chữ, Ribbon (reflection AdWindows .NET 8), ảnh ký hiệu (GraphicsSystem), Excel mở, ECDSA / mã máy
 chạy trên .NET 8 (log `[License]`), phím tắt (API nội bộ).
-v9.6 + v9.7 làm ở phiên cloud, PR #3 từ nhánh claude/feature-review-monetization-plan-4hj52r (chưa gộp main: gộp khi user bảo).
+v9.6 + v9.7 làm ở phiên cloud, PR #3 từ nhánh claude/feature-review-monetization-plan-4hj52r (đã gộp main, commit fcdcdf7). Zip v9.5 - v9.7 nằm trong `Dist` của repo (GitHub Releases chỉ tới v9.4).
 v9.6 Premium (MD5 `5FEEE00BD988C1B1EDE8E98E84A63C89`, `Dist\HUONG_DAN_TEST_20260930_v9.6_Premium.md`, build cloud tại commit 76ccb1e) = v9.5 +
 yêu cầu user 30/09 (ảnh hộp thoại block mẫu + form + bảng CAD có đầu báo tia chiếu chủng loại "Distance1=12320.3286822983"):
 - Chủng loại block động CHỈ từ Visibility, không có Visibility thì tham số dạng chữ (Lookup...). Tham số SỐ (độ dài Linear /
