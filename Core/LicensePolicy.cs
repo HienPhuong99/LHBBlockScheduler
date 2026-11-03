@@ -27,6 +27,9 @@ namespace LHBBlockScheduler.Core
         {
             // kid 1: tạo 30/09/2026 trong phiên Claude Code (cloud). Khoá bí mật chỉ gửi riêng cho chủ sản phẩm.
             { 1, "XUtGwQ0oQm9DKQhDb5znyNqV8Mdpc2KyTqfM70L7T7NpIxOrpt9+Spyt247XBfn7NjwuKDw8yaBVjVNyEqx0Kw==" },
+            // kid 2 (v9.8): tạo 03/11/2026 bằng "LHBKeyGen init --kid 2" trên máy chủ sản phẩm, khoá bí mật chưa rời máy đó.
+            // Khoá chính để cấp key bán; kid 1 giữ lại cho key review đã cấp.
+            { 2, "aJJfcccr6EYBawYKLotr7zfd/kmpmeGbqDCjwMB7LZ80x/BYJZmZgZImPpuDRq2e+FDq88cbu4yA5hds92QIdw==" },
         };
 
         /// <summary>

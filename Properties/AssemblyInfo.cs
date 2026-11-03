@@ -30,7 +30,7 @@ namespace LHBBlockScheduler
     public class MyApp : IExtensionApplication
     {
         /// <summary>Phiên bản (sửa DUY NHẤT ở đây khi ra bản mới): tiêu đề form, dòng lệnh, AssemblyVersion, LHB.lsp (build.ps1 ghi vào).</summary>
-        public const string Version = "9.7";
+        public const string Version = "9.8";
         public const string AssemblyVersionText = Version + ".0.0";
         /// <summary>"v9.4 Premium" - hiện trên tiêu đề form "Thống kê Block v9.4 Premium" và dòng lệnh lúc nạp.</summary>
         public const string DisplayVersion = "v" + Version + " Premium";
