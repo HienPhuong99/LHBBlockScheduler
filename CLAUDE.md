@@ -29,6 +29,7 @@
 
 ## Quy trình phát hành bản test
 1. `dotnet build -c Release -p:LhbAllTargets=true` (3 bản DLL), sửa hết lỗi compile + cảnh báo của cả 3 đích.
+   Máy chỉ có .NET 8 SDK (máy dev 03/11/2026): thêm `-p:LhbNoNet10=true` (build.ps1 tự thêm) -> 2 bản, thiếu bản AutoCAD 2027.
 2. `powershell -ExecutionPolicy Bypass -File build.ps1` -> `Dist\LHBBlockScheduler\` (MD5 trong build-info.txt).
 3. Từ v9 (yêu cầu user 29/09/2026) mọi bản thêm hậu tố Premium: tiêu đề form "Thống kê Block vN Premium" (từ v9.4 chỉ sửa
    `MyApp.Version` trong Properties/AssemblyInfo.cs),
@@ -45,7 +46,35 @@
    build -> nén zip -> push code + zip -> gửi file zip cho user (phiên cloud: SendUserFile; máy dev: chép vào
    `C:\Users\vsp\Downloads\tool\`). User chỉ mở file kiểm tra: báo cáo KHÔNG giao việc GitHub cho user (tạo Release, gộp PR...).
 
-## Trạng thái (30/09/2026): bản v9.7 Premium (chạy AutoCAD 2021 – 2027) đã phát hành, CHƯA có kết quả test (v9 – v9.6 cũng chưa)
+## Trạng thái (03/11/2026): bản v9.8 Premium (AutoCAD 2021 – 2026, chưa có bản 2027; TẠM TẮT bản quyền) đã phát hành, CHƯA có kết quả test (v9 – v9.7 cũng chưa)
+v9.8 Premium (MD5 net48 `5998A1821C4A05B2EA2B4AB0F1C6FB8C`, net8 `D39AD5D70420E13814985245F32F0EDC`, KHÔNG có net10,
+`Dist\HUONG_DAN_TEST_20261103_v9.8_Premium.md`, build máy dev tại commit e307737) = v9.7 + khoá ký kid 2 + tạm tắt bản quyền.
+User 03/11/2026: "kéo code về, cấp 1 key premium vĩnh viễn để tôi nhập" (workflow cấp key báo thiếu secret, máy dev không có file khoá
+kid 1 -> user chọn tạo kid 2), rồi "tạm thời ẩn bản quyền đi, để cho đồng nghiệp phát triển thêm vào dự án":
+- `LicenseManager.Enforced = false` (như v9.3 - v9.4): Premium mở cho mọi máy, không đếm dùng thử; key vẫn kích hoạt / lưu được
+  (settings.json). Ô mã LHBBANQUYEN có chữ mẫu "(Bản hiện tại miễn phí...)": dán key phải xoá chữ mẫu trước (Activate_Click chỉ nhận
+  chuỗi bắt đầu "LHB2" khi không bắt bản quyền). BẬT LẠI khi user bảo: `Enforced = true` + build bản mới.
+- Thư mục dự án trước 03/11 không phải repo git (code cũ 07/09) -> đã backup `C:\Users\vsp\Downloads\LHBBlockScheduler_backup_local_20261103\`,
+  rồi `git init` + checkout origin/main.
+- `LicensePolicy.TrustedKeys` thêm kid 2: `LHBKeyGen init --kid 2` chạy trên máy dev (Claude chỉ thấy khoá công khai). Khoá ký kid 2,
+  sổ key, LHBKeyGen.exe v2 ở `C:\Users\vsp\Downloads\tool\LHB_KEYS\` (công cụ v1 + khoá RSA cũ ở `LHB_KEYS\v1_cu\`). File khoá kid 1 KHÔNG
+  có trên máy dev. Không ghi trạng thái mật khẩu / chi tiết file khoá vào tài liệu trong repo (repo public).
+- Key chủ sản phẩm: serial `2166E9F8`, dùng chung (Floating), trọn đời, kid 2, "Chủ sản phẩm LHB" - không cấp theo máy vì máy dev không có
+  AutoCAD và máy AutoCAD 2021 chưa gửi mã máy v2. Chuỗi key: `C:\Users\vsp\Downloads\tool\KEY_PREMIUM_LHB_2166E9F8.txt` (KHÔNG đưa lên repo).
+- Máy dev: không có AutoCAD, chỉ .NET 8 SDK 8.0.424, không có Python (zip đóng gói bằng PowerShell System.IO.Compression, đúng cấu
+  trúc pack_cloud.py). csproj `LhbNoNet10=true` bỏ đích net10. KHÔNG dùng `-p:TargetFrameworks=a%3Bb`: MSBuild coi %3B là dấu ";" chữ
+  -> 1 đích "net48;net8.0-windows" (NETSDK1046). `bin\`, `obj\` cũ của bản 07/09 chứa DLL thừa -> xoá trước khi build phát hành.
+  Bản net8 build bằng SDK 8: deps.json có thêm mục gói AutoCAD.NET (compile-only, v9.7 build SDK 10 thì không) - để ý khi test AutoCAD 2025.
+- Repo GitHub đang PUBLIC (03/11/2026) dù tài liệu ghi private. Workflow `lhb-cap-key.yml` có bước đầu dừng khi repo public; `.gitignore`
+  chặn thêm `KEY_*.txt`, `*.pfx`, `*.p12`, `lhb-ledger*`, `*private_key*`. Chưa thêm secret / chưa cấp key qua Actions.
+- LHBLicenseTests: `LHB_TEST_REAL_KEY` nhận key thật của mọi kid add-in nhận (63 kiểm tra khi có biến).
+- Kiểm chứng 03/11 (4 agent): key được chính 2 DLL đóng gói chấp nhận (gọi LicensePolicy.Validate qua reflection), 21 biến thể sửa nội dung
+  key đều bị từ chối, v9.7 từ chối key kid 2, lịch sử git + mọi zip trong Dist không chứa khoá bí mật / chuỗi key.
+- Tồn tại cũ (chưa sửa): `LHBKeyGen verify` in "KEY HỢP LỆ" + mã thoát 0 dựa trên chữ ký / thu hồi / hạn, chưa xét mã máy + bit Premium
+  (đọc dòng "Add-in bản này"); `SettingsManager.SaveSettings` nuốt lỗi -> kích hoạt báo OK dù không ghi được settings.json.
+Cần xác nhận khi có kết quả test v9.8: Premium chạy không hỏi mã; kích hoạt key 2166E9F8 trên AutoCAD 2021 (log `[License] Kiểm mã serial
+2166E9F8, kid 2 ... HỢP LỆ`), còn sau khi mở lại AutoCAD.
+Chưa làm: bản AutoCAD 2027 (net10) của v9.8 - cần cài .NET 10 SDK trên máy dev (hỏi user trước khi tải).
 v9.7 Premium (MD5 net48 `401475A3C654362B5D0CF9EFEE757BFA`, net8 `695E16FFB32622ED3743562E2E9E038B`, net10 `5A55D24AB9F341328203A2BC868F42E0`,
 `Dist\HUONG_DAN_TEST_20260930_v9.7_Premium.md`, build cloud tại commit 6001c3f) = v9.6 + đa phiên bản AutoCAD (review D1; user 30/09
 "Tiếp tục nhé bạn" -> tự chọn bước tiếp theo của lộ trình: đồng nghiệp dùng key review có thể đang chạy AutoCAD 2025+):
