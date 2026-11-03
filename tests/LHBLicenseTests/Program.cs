@@ -116,12 +116,13 @@ namespace LHBLicenseTests
             Throws(() => Issue(key, LicenseKind.Machine, null, "A", null), "key theo máy thiếu mã máy");
             Throws(() => Issue(key, LicenseKind.Review, machine, "A", null), "key review có mã máy");
 
-            Section("Key review THẬT (kid 1) nếu có biến LHB_TEST_REAL_KEY");
+            // v9.8: key thật của mọi kid add-in đang nhận (kid 1 review, kid 2 key bán), không chỉ kid 1
+            Section("Key THẬT (dùng chung / review) nếu có biến LHB_TEST_REAL_KEY");
             string real = Environment.GetEnvironmentVariable("LHB_TEST_REAL_KEY");
             if (!string.IsNullOrEmpty(real))
             {
                 var r = LicensePolicy.Validate(real, other, today);
-                Check(r.Valid && r.Data.KeyId == 1, $"key thật hợp lệ với khoá kid 1 của add-in: {(r.Valid ? r.Data.SerialText + " " + r.Data.Label : r.Error)}");
+                Check(r.Valid && r.Data.KeyId != TestKid, $"key thật hợp lệ với khoá của add-in: {(r.Valid ? $"kid {r.Data.KeyId}, {r.Data.SerialText} {r.Data.Label}" : r.Error)}");
             }
             else Console.WriteLine("  (bỏ qua)");
 

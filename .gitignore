@@ -13,13 +13,17 @@ Dist/LHBBlockScheduler/
 Bundle/**/Contents/
 
 # Khoá bí mật tạo mã kích hoạt: KHÔNG BAO GIỜ đưa lên repo
-*private_key*.xml
+*private_key*
 LHB_KEYS/
 # Bản quyền v2 (v9.5): khoá ký ECDSA + sổ key (thông tin khách) - chỉ ở máy người bán / GitHub Secrets / nhánh sổ key
 LHB_SIGNING_KEY*
 *.pem
+*.pfx
+*.p12
 LHB_KEY_LEDGER*
-lhb-ledger*.jsonl
+lhb-ledger*
+# Chuỗi key đã cấp (gửi riêng từng người, vd KEY_PREMIUM_LHB_<serial>.txt, KEY_REVIEW_LHB.txt)
+KEY_*.txt
 
 # Cấu hình công cụ cá nhân, file chẩn đoán
 .claude/

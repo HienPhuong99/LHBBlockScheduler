@@ -15,17 +15,26 @@ if (-not (Test-Path $dotnet)) {
 Write-Host "1. Building Release..." -ForegroundColor Cyan
 # v9.7: 3 ban DLL - AutoCAD 2021-2024 (net48, thu muc goc), 2025-2026 (net8), 2027 (net10). Ban 2025+ can .NET 10 SDK;
 # may chua co .NET 10 SDK -> chi build ban 2021-2024, LHB.lsp bao "goi khong co ban" khi mo bang AutoCAD 2025+.
-$hasSdk10 = $false
+# v9.8: may chi co .NET 8 SDK (may dev 03/11/2026) van build duoc ban 2025-2026 (net8), chi thieu ban 2027 (net10).
+$sdkMax = 0
 foreach ($line in (& $dotnet --list-sdks 2>$null)) {
-    if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { $hasSdk10 = $true }
+    if ($line -match '^(\d+)\.' -and [int]$Matches[1] -gt $sdkMax) { $sdkMax = [int]$Matches[1] }
 }
+# Thu muc con cua ban AutoCAD 2025+ duoc build LAN NAY (chi chep cac ban nay vao Dist, bo DLL cu con sot trong bin)
+$builtTargets = @()
 $buildArgs = @("build", "-c", "Release")
-if ($hasSdk10) {
+if ($sdkMax -ge 10) {
     $buildArgs += "-p:LhbAllTargets=true"
+    $builtTargets = @("net8", "net10")
     Write-Host "   Build 3 ban: AutoCAD 2021-2024 (net48), 2025-2026 (net8), 2027 (net10)" -ForegroundColor Gray
+} elseif ($sdkMax -ge 8) {
+    # LhbNoNet10 (csproj) bo dich net10. Khong truyen -p:TargetFrameworks: dau ";" phai thoat %3B, MSBuild lai coi la 1 dich
+    $buildArgs += "-p:LhbAllTargets=true", "-p:LhbNoNet10=true"
+    $builtTargets = @("net8")
+    Write-Host "   CANH BAO: may chua co .NET 10 SDK -> build ban AutoCAD 2021-2024 (net48) + 2025-2026 (net8), KHONG co ban 2027 (net10)." -ForegroundColor Yellow
+    Write-Host "   Cai .NET 10 SDK (https://dotnet.microsoft.com/download) de build them ban AutoCAD 2027." -ForegroundColor Yellow
 } else {
-    Write-Host "   CANH BAO: may chua co .NET 10 SDK -> chi build ban AutoCAD 2021-2024 (net48)." -ForegroundColor Yellow
-    Write-Host "   Cai .NET 10 SDK (https://dotnet.microsoft.com/download) de build them ban AutoCAD 2025-2027." -ForegroundColor Yellow
+    Write-Host "   CANH BAO: may chua co .NET 8 SDK -> chi build ban AutoCAD 2021-2024 (net48)." -ForegroundColor Yellow
 }
 & $dotnet @buildArgs
 if ($LASTEXITCODE -ne 0) {
@@ -64,9 +73,9 @@ if (Test-Path ".\LHB.lsp") {
 # v9.7: ban AutoCAD 2025-2026 / 2027 vao thu muc con net8 / net10 cua Dist, moi thu muc 1 build-info.txt
 # (LHB.lsp chon DLL theo ACADVER). Chi lay ban vua build lan nay (bo DLL cu con sot trong bin).
 $extraMd5 = @{}
-foreach ($t in @("net8", "net10")) {
+foreach ($t in $builtTargets) {
     $src = ".\bin\Release\$t"
-    if ($hasSdk10 -and (Test-Path "$src\LHBBlockScheduler.dll")) {
+    if (Test-Path "$src\LHBBlockScheduler.dll") {
         $dst = "$distPath\$t"
         New-Item -ItemType Directory -Force -Path $dst | Out-Null
         Copy-Item "$src\*" -Destination $dst -Force -Recurse

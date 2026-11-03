@@ -4,7 +4,9 @@ Bản v9 Premium thêm 13 tính năng, tham khảo lệnh COUNT của AutoCAD 20
 
 Mọi tính năng cũ (quét, block mẫu, tìm trùng, xuất bảng, phím tắt...) vẫn miễn phí.
 
-> **Từ v9.5: đã bật bản quyền v2** — tính năng Premium dùng thử **30 ngày** (tính từ lần đầu nạp v9.5), sau đó cần mã kích hoạt `LHB2-...` (mục 13).
+> **v9.8: tạm tắt bản quyền** — mọi tính năng Premium mở cho mọi máy, không cần mã, không đếm ngày dùng thử. Mã `LHB2-...`
+> vẫn kích hoạt / lưu được (mục 13) để dùng tiếp khi bản sau bật lại.
+> v9.5 – v9.7: đã bật bản quyền v2 — Premium dùng thử **30 ngày** (tính từ lần đầu nạp v9.5), sau đó cần mã kích hoạt `LHB2-...`.
 > Có mã review trọn đời dùng chung cho nhóm review. v9.3 – v9.4: Premium miễn phí, không cần mã.
 > Thiết kế, mức an toàn, cách cấp / quản lý key: [`docs/BAN_QUYEN_VA_CAP_KEY.md`](docs/BAN_QUYEN_VA_CAP_KEY.md).
 

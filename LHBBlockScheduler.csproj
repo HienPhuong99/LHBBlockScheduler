@@ -11,6 +11,8 @@
       (build.ps1 tự bật khi máy có .NET 10 SDK; phiên cloud luôn bật).
     -->
     <TargetFrameworks Condition="'$(LhbAllTargets)' == 'true'">net48;net8.0-windows;net10.0-windows</TargetFrameworks>
+    <!-- v9.8: máy chỉ có .NET 8 SDK -> build.ps1 thêm LhbNoNet10=true: build bản 2021 - 2024 + 2025 - 2026, bỏ bản 2027 -->
+    <TargetFrameworks Condition="'$(LhbAllTargets)' == 'true' and '$(LhbNoNet10)' == 'true'">net48;net8.0-windows</TargetFrameworks>
     <TargetFramework Condition="'$(LhbAllTargets)' != 'true'">net48</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Ribbon (Premium P11) dùng WPF ImageSource: net48 tham chiếu PresentationCore / WindowsBase bên dưới -->

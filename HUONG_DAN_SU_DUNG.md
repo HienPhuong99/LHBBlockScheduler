@@ -7,15 +7,15 @@
 ## 📋 Yêu cầu
 
 - ✅ AutoCAD **2021 – 2027** bản đầy đủ 64-bit, kể cả AutoCAD MEP / Electrical / Civil 3D cùng đời (AutoCAD LT không chạy
-  được add-in .NET)
+  được add-in .NET). **Bản v9.8: AutoCAD 2021 – 2026** (chưa có bản 2027, xem bảng)
 - ✅ Windows 10/11
-- ℹ️ Từ v9.7 trong zip có 3 bản DLL, `LHB.lsp` tự chọn theo AutoCAD đang mở (không cần cài thêm .NET):
+- ℹ️ Từ v9.7 trong zip có tới 3 bản DLL, `LHB.lsp` tự chọn theo AutoCAD đang mở (không cần cài thêm .NET):
 
 | AutoCAD | .NET | DLL trong thư mục add-in |
 |---|---|---|
 | 2021, 2022, 2023, 2024 | .NET Framework 4.8 | `LHBBlockScheduler.dll` (thư mục gốc) |
 | 2025, 2026 (cả khi đã cập nhật .NET 10) | .NET 8 | `net8\LHBBlockScheduler.dll` |
-| 2027 | .NET 10 | `net10\LHBBlockScheduler.dll` |
+| 2027 | .NET 10 | `net10\LHBBlockScheduler.dll` — **v9.8 chưa có** (kéo thả `LHB.lsp` báo "Gói add-in này không có bản cho AutoCAD 2027"; dùng tạm v9.7) |
 
 > Thư viện block mẫu (`ThuVienMau`), `log.txt`, file `LHBDIAG_*.txt` luôn nằm ở **thư mục gốc** add-in (cạnh `LHB.lsp`),
 > dùng chung cho mọi phiên bản AutoCAD trên máy. Cài đặt, key bản quyền, dùng thử cũng dùng chung.
@@ -156,10 +156,11 @@ Lần sau mở AutoCAD phải NETLOAD lại (hoặc dùng Cách 1 + Startup Suit
 
 ## ⭐ Tính năng Premium (từ v9)
 
-Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. Từ v9.5 **đã bật bản quyền**: dùng thử Premium 30 ngày (tính từ lần đầu nạp v9.5), sau đó kích hoạt bằng `LHBBANQUYEN`. Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
+Mở bằng tab Ribbon **LHB Premium**, bảng công cụ `LHBPALETTE`, nút vàng **Premium ▾** trên form thống kê, hoặc gõ lệnh. **v9.8: tạm tắt bản quyền** — mọi tính năng Premium mở cho mọi máy, không cần mã, không đếm ngày dùng thử (v9.5 – v9.7: dùng thử Premium 30 ngày rồi cần mã kích hoạt `LHBBANQUYEN`). Chi tiết và giới hạn: file `TINH_NANG_PREMIUM.md`.
 
 ### Kích hoạt bản quyền (`LHBBANQUYEN`)
-1. Gõ `LHBBANQUYEN`. Dòng đậm là trạng thái: "Dùng thử Premium: còn N ngày" / "Đã kích hoạt Premium (...)" / "Hết hạn dùng thử...".
+1. Gõ `LHBBANQUYEN`. Dòng đậm là trạng thái: "Premium miễn phí (chưa bật bản quyền, không cần mã)" (v9.8) / "Dùng thử Premium: còn N ngày" / "Đã kích hoạt Premium (...)" / "Hết hạn dùng thử...".
+   v9.8 vẫn dán + lưu được key: khi bản sau bật lại bản quyền, máy đã có key dùng tiếp không cần nhập lại.
 2. **Mua key theo máy:** bấm **Chép mã máy**, gửi mã `XXXX-XXXX-XXXX-XXXX` cho người bán. Cài lại Windows không đổi mã máy; thay bo mạch chủ thì đổi.
 3. Nhận key dạng `LHB2-...` → dán vào ô Mã kích hoạt (xuống dòng, dấu cách không sao) → **Kích hoạt**.
    Key dùng chung / key review (nhóm review) không cần gửi mã máy, dán là dùng.

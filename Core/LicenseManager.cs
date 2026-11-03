@@ -23,9 +23,11 @@ namespace LHBBlockScheduler.Core
         /// <summary>
         /// true = bắt bản quyền (bật từ v9.5 theo yêu cầu user 30/09/2026 "làm bảo mật hơn + cấp key trọn đời cho đồng nghiệp").
         /// false = Premium mở cho mọi máy, không đếm ngày dùng thử (như v9.3 - v9.4).
+        /// v9.8: TẠM TẮT (user 03/11/2026: "tạm thời ẩn bản quyền đi, để cho đồng nghiệp phát triển thêm vào dự án").
+        /// Mã kích hoạt vẫn nhập / kiểm / lưu được (key chủ sản phẩm kid 2 đã cấp) -> bật lại: đổi thành true + build bản mới.
         /// (static readonly thay vì const để không có cảnh báo "code không chạy tới".)
         /// </summary>
-        public static readonly bool Enforced = true;
+        public static readonly bool Enforced = false;
 
         private static bool _trialNoticeShown;
 

@@ -58,6 +58,13 @@ jobs:
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
     steps:
+      # Repo public -> log lần chạy (có chuỗi key) và nhánh sổ key (thông tin khách) ai cũng xem được: dừng trước khi làm gì
+      - name: Chặn khi repo đang public
+        if: ${{ !github.event.repository.private }}
+        run: |
+          echo "::error::Repo đang PUBLIC: key trong log và sổ key sẽ lộ. Chuyển repo sang private rồi chạy lại (docs/BAN_QUYEN_VA_CAP_KEY.md mục 6)."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4

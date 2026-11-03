@@ -21,6 +21,10 @@
 
 ## 1. Trả lời nhanh
 
+> **v9.8 (03/11/2026): TẠM TẮT bắt bản quyền** (`LicenseManager.Enforced = false`) theo yêu cầu chủ sản phẩm, để đồng nghiệp
+> phát triển thêm: Premium mở cho mọi máy, không đếm ngày dùng thử. Key vẫn kích hoạt / lưu được. Bật lại = đổi `Enforced = true`
+> rồi build bản mới (add-in đã nhận kid 1 + kid 2, máy đã lưu key dùng tiếp). Phần dưới mô tả lúc bản quyền bật (v9.5 – v9.7).
+
 **Cơ chế bảo mật đã làm chưa?** Có từ v9 nhưng yếu và **đang tắt** từ v9.3 (`LicenseManager.Enforced = false`, Premium miễn phí).
 v9.5 làm lại toàn bộ (bản quyền v2) và **bật**: chưa có key thì dùng thử Premium 30 ngày, sau đó cần mã kích hoạt.
 Tính năng thường (quét, xuất bảng, block mẫu, tìm trùng...) vẫn miễn phí, không cần key.
@@ -146,7 +150,7 @@ tải `lhb-ledger.jsonl` về đổi tên thành `LHB_KEY_LEDGER.jsonl` để xe
 1. **Merge PR** chứa v9.5 vào `main` (workflow chỉ hiện ở tab Actions khi file `.github/workflows/lhb-cap-key.yml` có trên nhánh mặc định).
 2. Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
    - Name: `LHB_SIGNING_KEY`
-   - Secret: mở `LHB_SIGNING_KEY_kid1.txt` bằng Notepad, chép **toàn bộ** nội dung dán vào.
+   - Secret: mở file khoá ký (từ v9.8: `LHB_SIGNING_KEY_kid2.txt`) bằng Notepad, chép **toàn bộ** nội dung dán vào.
    - Nếu đã đặt mật khẩu cho file khoá (`LHBKeyGen protect`): thêm secret `LHB_KEY_PASSPHRASE` = mật khẩu.
 3. Thử: **Actions** → **LHB - Cấp key bản quyền** → **Run workflow** → action `list` → phải chạy xanh.
 4. Cấp thử 1 key `review` tên "Thử", rồi `revoke` serial của nó (để quen thao tác).
@@ -154,6 +158,10 @@ tải `lhb-ledger.jsonl` về đổi tên thành `LHB_KEY_LEDGER.jsonl` để xe
 **Ai thấy được gì:** chỉ người có quyền **ghi** repo chạy được workflow. Người có quyền **đọc** repo xem được key trong log và
 sổ key (tên khách, SĐT trong ghi chú) → repo giữ private, không thêm cộng tác viên không tin cậy. Không ai (kể cả bạn) đọc lại
 được giá trị secret sau khi lưu; workflow không in khoá ra log.
+
+> **03/11/2026: repo đang để PUBLIC** (Settings → General → Danger Zone → Change visibility). Chuyển private **trước** khi thêm
+> secret: repo public thì ai cũng xem được log Actions (có chuỗi key) và nhánh sổ key. Chưa chuyển thì cấp key bằng cách A.
+> Từ v9.8 workflow tự dừng ở bước đầu ("Chặn khi repo đang public") nếu repo còn public.
 
 ---
 
@@ -171,6 +179,11 @@ cho các bản đang nhận kid đó.
    2. Gửi Claude **chỉ dòng khoá công khai** in ra (`{ 2, "..." },` — không bí mật) → thêm vào `TrustedKeys`, build bản mới.
    3. Từ bản đó cấp key bán bằng kid 2 (cập nhật secret `LHB_SIGNING_KEY` trên GitHub = file kid 2). Giữ kid 1 để key review vẫn chạy;
       khi thôi review, bỏ kid 1 khỏi `TrustedKeys` ở bản sau.
+
+   **Đã làm 03/11/2026 (v9.8):** Claude Code chạy `LHBKeyGen init --kid 2` trên máy chủ sản phẩm (chỉ thấy dòng khoá công khai),
+   add-in từ v9.8 nhận kid 2. File khoá kid 2 + sổ key + `LHBKeyGen.exe` v2 nằm chung 1 thư mục ngoài repo (công cụ v1 cũ để riêng).
+   Key đầu tiên của kid 2: serial `2166E9F8`, dùng chung, trọn đời, cấp cho "Chủ sản phẩm LHB" (key riêng của chủ sản phẩm,
+   chuỗi key gửi riêng, không nằm trong repo).
 5. **Nếu lộ khoá:** tạo kid mới → bỏ kid bị lộ khỏi `TrustedKeys` → build bản mới → cấp lại key cho khách hợp lệ theo sổ key
    (lọc `list --find` / CSV) → báo khách cập nhật.
 
@@ -220,8 +233,9 @@ Thiết kế v2 đã chừa chỗ: gói tính năng (bit Pro / Team), kid, loạ
 - [ ] Chép `LHB_SIGNING_KEY_kid1.txt` + `LHB_KEY_LEDGER.jsonl` vào chỗ an toàn (2 nơi), xoá bản trong Downloads.
 - [ ] (Nên) `LHBKeyGen protect` đặt mật khẩu file khoá.
 - [ ] Gửi đồng nghiệp: zip v9.5 + `KEY_REVIEW_LHB.txt`; nhờ gửi lại `LHBDIAG_*.txt` nếu lỗi.
-- [ ] Merge PR vào `main`, thêm secret `LHB_SIGNING_KEY`, chạy thử workflow `list`.
-- [ ] Trước khi bán key đầu tiên: tạo kid 2 trên máy bạn, gửi Claude dòng khoá công khai.
+- [ ] Chuyển repo GitHub sang private, rồi mới thêm secret `LHB_SIGNING_KEY` (file kid 2), chạy thử workflow `list`.
+- [x] Trước khi bán key đầu tiên: tạo kid 2 trên máy bạn, thêm khoá công khai vào add-in (03/11/2026, v9.8).
+- [ ] File khoá kid 2: đặt mật khẩu (`LHBKeyGen protect`, menu 9), sao lưu file khoá + sổ key ra 2 nơi.
 
 ---
 

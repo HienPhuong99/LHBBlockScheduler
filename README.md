@@ -4,7 +4,7 @@ Add-in AutoCAD (.NET, C#) thống kê block thiết bị (PCCC, điện, nước
 
 - Hướng dẫn sử dụng: [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md)
 - Tính năng Premium (từ v9): [TINH_NANG_PREMIUM.md](TINH_NANG_PREMIUM.md)
-- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.7 Premium — chạy AutoCAD 2021 – 2027: 3 bản DLL, `LHB.lsp` tự chọn theo phiên bản AutoCAD; v9.6 chủng loại block động không còn "Distance1=...", tách theo kích thước, `LHBKHOPCOT`; v9.5 bản quyền v2; v9.4 "ổn định" sửa đếm ARRAY / MINSERT / XREF)
+- Hướng dẫn test từng bản: thư mục [Dist](Dist) (bản mới nhất: v9.8 Premium — tạm tắt bản quyền (Premium miễn phí), add-in nhận khoá ký kid 2, chạy AutoCAD 2021 – 2026 (chưa có bản 2027); v9.7 chạy AutoCAD 2021 – 2027: 3 bản DLL, `LHB.lsp` tự chọn theo phiên bản AutoCAD; v9.6 chủng loại block động không còn "Distance1=...", tách theo kích thước, `LHBKHOPCOT`; v9.5 bản quyền v2; v9.4 "ổn định" sửa đếm ARRAY / MINSERT / XREF)
 - Bản đóng gói (zip, có sẵn hướng dẫn test bên trong): thư mục [Dist](Dist) (từ v9.5); v9 – v9.4: mục **Releases**
 - Review chức năng, đề xuất tính năng, kế hoạch thương mại hoá (29/09/2026): [docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md](docs/REVIEW_VA_KE_HOACH_THUONG_MAI_HOA.md)
 - Bản quyền v2, mức an toàn, cấp và quản lý key (30/09/2026): [docs/BAN_QUYEN_VA_CAP_KEY.md](docs/BAN_QUYEN_VA_CAP_KEY.md)
